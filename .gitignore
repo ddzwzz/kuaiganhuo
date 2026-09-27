@@ -16,3 +16,11 @@ Thumbs.db
 # 本地环境
 *.env
 .env
+
+# Python 产物 / 测试日志
+__pycache__/
+*.pyc
+*.pyo
+*.log
+longrun.log
+longrun2.log

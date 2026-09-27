@@ -17,12 +17,26 @@ public struct AIClient: Sendable {
         case noAPIKey
         case badResponse(String)
         case badJSON(String)
+        /// HTTP 状态码错误：提示语按小白能看懂的方式翻译（401 说 Key 错，402 说没钱…）
+        case httpStatus(Int)
+        /// 连不上：网络问题或本地模型地址不通
+        case transport(String)
 
         public var errorDescription: String? {
             switch self {
             case .noAPIKey: return "还没填 API Key，去设置页填一下"
             case .badResponse(let s): return "接口返回异常：\(s)"
             case .badJSON(let s): return "AI 输出解析失败：\(s)"
+            case .httpStatus(let code):
+                switch code {
+                case 401, 403: return "API Key 不对或已失效，去设置页重新粘一次"
+                case 402: return "账号余额不足，去 DeepSeek 后台充点值（10 块能用很久）"
+                case 404: return "接口地址或模型名不对，检查设置里的 API 地址和模型名"
+                case 429: return "请求太频繁被限流了，歇一分钟再试"
+                case 500..<600: return "AI 服务端出错了，稍后再试"
+                default: return "接口返回 HTTP \(code)，检查 API 地址和模型名"
+                }
+            case .transport(let s): return "连不上 AI（\(s)）：检查网络；用本地模型的话，看电脑开没开、地址填对没"
             }
         }
     }
@@ -57,7 +71,7 @@ public struct AIClient: Sendable {
     public func chat(system: String, user: String) async throws -> String {
         guard !config.apiKey.isEmpty else { throw AIError.noAPIKey }
         let url = URL(string: config.baseURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/chat/completions")!
-        var req = URLRequest(url: url, timeoutInterval: 90)
+        var req = URLRequest(url: url, timeoutInterval: 45)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("Bearer " + config.apiKey, forHTTPHeaderField: "Authorization")
@@ -70,16 +84,39 @@ public struct AIClient: Sendable {
         )
         req.httpBody = try JSONEncoder().encode(body)
 
-        let (data, resp) = try await URLSession.shared.data(for: req)
-        guard let http = resp as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            let snippet = String(data: data.prefix(300), encoding: .utf8) ?? ""
-            throw AIError.badResponse("HTTP \((resp as? HTTPURLResponse)?.statusCode ?? -1) \(snippet)")
+        // 两次机会：网络抖动、空回复、5xx 都值得再试一次；4xx（Key 错、没钱、地址错）立刻失败不重试
+        var lastError: AIError = .badResponse("未知错误")
+        for attempt in 0..<2 {
+            var data = Data()
+            var resp: URLResponse = URLResponse()
+            do {
+                let pair = try await URLSession.shared.data(for: req)
+                data = pair.0
+                resp = pair.1
+            } catch {
+                lastError = .transport(error.localizedDescription)
+                if attempt == 0 { continue }
+                throw lastError
+            }
+            guard let http = resp as? HTTPURLResponse else {
+                lastError = .transport("没有收到响应")
+                if attempt == 0 { continue }
+                throw lastError
+            }
+            guard (200..<300).contains(http.statusCode) else {
+                lastError = .httpStatus(http.statusCode)
+                if (400..<500).contains(http.statusCode) || attempt == 1 { throw lastError }
+                continue
+            }
+            guard let decoded = try? JSONDecoder().decode(WireResponse.self, from: data),
+                  let content = decoded.choices.first?.message.content, !content.isEmpty else {
+                lastError = .badResponse("空回复或返回格式不对（模型名填错？）")
+                if attempt == 0 { continue }
+                throw lastError
+            }
+            return content
         }
-        let decoded = try JSONDecoder().decode(WireResponse.self, from: data)
-        guard let content = decoded.choices.first?.message.content, !content.isEmpty else {
-            throw AIError.badResponse("空回复")
-        }
-        return content
+        throw lastError
     }
 
     /// 从模型输出中抠出第一个括号配平的 JSON（容忍 ```json 包裹、前后废话、多对象输出）

@@ -2,7 +2,7 @@ name: KuaiGanHuo
 options:
   bundleIdPrefix: com.kgh
   deploymentTarget:
-    iOS: "17.0"
+    iOS: "17.4"
   createIntermediateGroups: true
 
 packages:

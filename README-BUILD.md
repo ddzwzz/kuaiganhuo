@@ -58,6 +58,25 @@ git push -u origin main
 
 之后每次改动：`git add -A && git commit -m "更新" && git push`，然后去 Actions 页面看结果。
 
+## 本地部署联调（不需要 Mac / 真 Ollama / API）
+
+「本地部署」开关：设置页打开后，App 把 AI 请求指向你电脑上跑的 Ollama（或 LM Studio），
+数据不出局域网、不花钱。这条链路的线协议（请求路径、字段、响应结构）和 Ollama 的
+OpenAI 兼容接口完全同构——可以用下面的 Windows 脚本验证，不需要 Mac 或真实模型：
+
+```bash
+cd kuaiganhuo/testbench
+python mock_ollama.py            # 终端 A：起一个本地模型 mock 服务（http://127.0.0.1:11434/v1）
+python verify_local_deploy.py    # 终端 B：发一条与 Swift AIClient 完全一致的请求做端到端验证
+```
+
+`verify_local_deploy.py` 会按 Swift 的 `WireRequest`（model / messages / temperature / max_tokens）
+构造请求打到 `/v1/chat/completions`，再用和 `AIClient.extractJSON` 同款的括号配平算法解析响应，
+五个协议（解析 / 催促 / 判定 / 庆祝 / 习惯提醒）+ 连通性 ping 全过即代表线协议正确。
+
+真机上：电脑装好 Ollama 并 `ollama pull qwen2.5:3b-instruct`，手机和电脑连同一 WiFi，
+设置页把「本机地址」填 `http://<电脑IP>:11434/v1`、「本地模型名」填 `qwen2.5:3b-instruct` 即可。
+
 ## 改提示词的唯一入口
 
 **人设/语气/判定规则** → `KuaiGanHuCore/Sources/KuaiGanHuCore/PromptEngine.swift`

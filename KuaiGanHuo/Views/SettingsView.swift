@@ -39,6 +39,23 @@ struct SettingsView: View {
                         .autocorrectionDisabled()
                     TextField("模型名", text: Bindable(appState).model)
                         .autocorrectionDisabled()
+                } footer: {
+                    Text("任何 OpenAI 兼容接口都能填（DeepSeek / 豆包 / Kimi / 通义）。已调用 \(appState.aiCalls) 次，失败 \(appState.aiFailures) 次。")
+                }
+
+                Section {
+                    Toggle("用本地模型（电脑跑，不花钱）", isOn: Bindable(appState).useLocalModel)
+                    if appState.useLocalModel {
+                        TextField("本机地址", text: Bindable(appState).localBaseURL)
+                            .keyboardType(.URL)
+                            .autocorrectionDisabled()
+                        TextField("本地模型名", text: Bindable(appState).localModel)
+                            .autocorrectionDisabled()
+                    }
+                } header: {
+                    Text("本地部署（实验性）")
+                } footer: {
+                    Text("电脑上装 Ollama，手机和电脑连同一个 WiFi，地址填 http://电脑IP:11434/v1。对话完全不出你的设备，不花一分钱；代价是小模型没那么聪明，催得没那么狠。")
                 }
 
                 Section {

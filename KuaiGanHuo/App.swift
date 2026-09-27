@@ -128,6 +128,11 @@ final class AppState {
         self.baseURL = d.string(forKey: "kgh.baseURL") ?? "https://api.deepseek.com"
         self.model = d.string(forKey: "kgh.model") ?? "deepseek-chat"
         self.apiKeySet = !Keychain.get(service: "kgh", account: "apiKey").isEmpty
+        self.useLocalModel = d.bool(forKey: "kgh.useLocal")
+        self.localBaseURL = d.string(forKey: "kgh.localBaseURL") ?? "http://192.168.1.100:11434/v1"
+        self.localModel = d.string(forKey: "kgh.localModel") ?? "qwen2.5:3b-instruct"
+        self.aiCalls = d.integer(forKey: "kgh.aiCalls")
+        self.aiFailures = d.integer(forKey: "kgh.aiFailures")
         self.userGender = UserGender(rawValue: d.string(forKey: "kgh.userGender") ?? "") ?? .undisclosed
         if let data = d.data(forKey: "kgh.roleGenders"),
            let map = try? JSONDecoder().decode([String: String].self, from: data) {
@@ -351,8 +356,42 @@ final class AppState {
         return "历史理由分类统计：" + text
     }
 
+    // MARK: - AI 接入（云端 Key / 本地模型二选一）
+
+    /// 正在用本地模型（Ollama / LM Studio 等）：数据不出局域网，不花钱
+    var useLocalModel: Bool {
+        didSet { UserDefaults.standard.set(useLocalModel, forKey: "kgh.useLocal") }
+    }
+    /// 本地模型的 OpenAI 兼容地址（Ollama 默认 http://<电脑IP>:11434/v1）
+    var localBaseURL: String {
+        didSet { UserDefaults.standard.set(localBaseURL, forKey: "kgh.localBaseURL") }
+    }
+    var localModel: String {
+        didSet { UserDefaults.standard.set(localModel, forKey: "kgh.localModel") }
+    }
+    /// AI 调用统计：设置页显示"用了多少次、失败几次"，小白也能看懂 AI 到底跑没跑
+    var aiCalls: Int {
+        didSet { UserDefaults.standard.set(aiCalls, forKey: "kgh.aiCalls") }
+    }
+    var aiFailures: Int {
+        didSet { UserDefaults.standard.set(aiFailures, forKey: "kgh.aiFailures") }
+    }
+
+    func recordAICall(success: Bool) {
+        aiCalls += 1
+        if !success { aiFailures += 1 }
+    }
+
     func makeClient() -> AIClient {
-        AIClient(config: AIConfig(
+        if useLocalModel {
+            // 本地模型不需要真 Key，但底层要求非空，填个占位
+            return AIClient(config: AIConfig(
+                baseURL: localBaseURL,
+                apiKey: Keychain.get(service: "kgh", account: "apiKey").isEmpty ? "local" : Keychain.get(service: "kgh", account: "apiKey"),
+                model: localModel
+            ))
+        }
+        return AIClient(config: AIConfig(
             baseURL: baseURL,
             apiKey: Keychain.get(service: "kgh", account: "apiKey"),
             model: model

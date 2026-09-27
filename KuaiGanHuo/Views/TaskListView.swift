@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import KuaiGanHuCore
 
 /// 首页：任务列表
 struct TaskListView: View {
