@@ -11,6 +11,8 @@ import os
 import re
 import sys
 import time
+import contextlib
+import io
 import urllib.error
 import urllib.request
 
@@ -1071,16 +1073,50 @@ def main():
     ap.add_argument("--model", default="deepseek-chat")
     ap.add_argument("--api-key", default=os.environ.get("DEEPSEEK_API_KEY", ""))
     ap.add_argument("--only", default="", help="只跑名字里包含该子串的用例（如 --only 边界）")
+    ap.add_argument("--repeat", type=int, default=1,
+                    help="每用例重复调用次数（高强度稳定压测，统计真实模型判定漂移/偶发崩溃）")
     args = ap.parse_args()
     if args.real and not args.api_key:
         sys.exit("真实模式需要 DEEPSEEK_API_KEY 环境变量或 --api-key 参数")
     args.mock = not args.real
+    if args.repeat < 1:
+        args.repeat = 1
 
     cases = [c for c in CASES if args.only in c["name"]] if args.only else CASES
     mode = "MOCK（管线验证）" if args.mock else f"真实 API · {args.model}"
-    print(f"快干活 AI 测试台 · 模式：{mode} · 用例 {len(cases)} 个")
+    print(f"快干活 AI 测试台 · 模式：{mode} · 用例 {len(cases)} 个" + (f" · 高强度 ×{args.repeat}" if args.repeat > 1 else ""))
     for case in cases:
-        run_case(case, args)
+        if args.repeat > 1:
+            # 高强度：同一用例真实调用 N 次，统计判定稳定性与崩溃率
+            wins = 0
+            warns = 0
+            crashed = 0
+            verdicts = {}
+            print(f"\n{'─' * 64}\n高强度 ×{args.repeat}：{case['name']}")
+            for r in range(args.repeat):
+                buf = io.StringIO()
+                try:
+                    with contextlib.redirect_stdout(buf):
+                        run_case(case, args)
+                    out = buf.getvalue()
+                except Exception as e:
+                    crashed += 1
+                    print(f"   [轮 {r + 1}] ⚠️ 崩溃：{type(e).__name__}: {e}")
+                    continue
+                if "✅ 合理" in out:
+                    v = "合理"
+                elif "❌ 狡辩" in out:
+                    v = "狡辩"
+                else:
+                    v = "其他/无判定"
+                verdicts[v] = verdicts.get(v, 0) + 1
+                if "⚠️" in out:
+                    warns += 1
+                wins += 1
+            dist = "，".join(f"{k} {n}" for k, n in verdicts.items()) or "（无）"
+            print(f"   >>> 完成 {wins}/{args.repeat} 轮，崩溃 {crashed} 次，判定分布：{dist}，警告 {warns} 次")
+        else:
+            run_case(case, args)
     print(f"\n{line('═')}\n全部用例执行完毕。\n")
 
 
