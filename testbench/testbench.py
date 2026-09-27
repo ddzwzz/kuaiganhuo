@@ -10,6 +10,8 @@ import json
 import os
 import re
 import sys
+import time
+import urllib.error
 import urllib.request
 
 sys.stdout.reconfigure(encoding="utf-8")
@@ -328,18 +330,45 @@ def call_llm(system_prompt, user_content, args):
     body = json.dumps(
         {"model": args.model, "messages": messages, "temperature": 0.9, "max_tokens": 500}
     ).encode("utf-8")
-    req = urllib.request.Request(
-        f"{args.base_url.rstrip('/')}/chat/completions",
-        data=body,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {args.api_key}"},
-    )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        data = json.loads(resp.read().decode("utf-8"))
-    return data["choices"][0]["message"]["content"]
+    last_err = None
+    for attempt in range(6):
+        try:
+            req = urllib.request.Request(
+                f"{args.base_url.rstrip('/')}/chat/completions",
+                data=body,
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {args.api_key}"},
+            )
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            return data["choices"][0]["message"]["content"]
+        except urllib.error.HTTPError as e:
+            last_err = e
+            # 429 限流 / 5xx 服务端抖动 → 指数退避重试
+            if e.code in (429, 500, 502, 503) and attempt < 5:
+                wait = 5 * (2 ** attempt) + 2
+                print(f"   ⚠️ HTTP {e.code}（限流/抖动），{wait}s 后重试 ({attempt+1}/6)")
+                time.sleep(wait)
+                continue
+            raise
+        except urllib.error.URLError as e:
+            last_err = e
+            if attempt < 5:
+                wait = 5 * (2 ** attempt) + 2
+                print(f"   ⚠️ 网络错误 {e}，{wait}s 后重试 ({attempt+1}/6)")
+                time.sleep(wait)
+                continue
+            raise
+    raise last_err
 
+
+# 协议顶层键优先级：扫描到多个对象时，优先挑含这些键的对象（避免取到 AI 偶发的前导废话 JSON）
+_PROTOCOL_KEYS = ("tasks", "nudges", "verdict", "reply", "anchor", "evening",
+                  "profile_question", "safety_refuse", "promise_claim", "excuse_type",
+                  "major_event", "habit")
 
 def extract_json(text):
-    """从模型输出中抠出第一个括号配平的 JSON 对象（容忍 ```json 包裹、前后废话、多对象输出）"""
+    """从模型输出中抠出 JSON 对象（容忍 ```json 包裹、前后废话、多对象输出）。
+    若模型返回了多个对象（如偶发的前导废话 JSON），优先挑含协议键的那个。"""
     s = text.strip()
     if "```" in s:
         # 取代码块内容优先
@@ -347,16 +376,24 @@ def extract_json(text):
         if inner:
             s = inner.group(1)
     dec = json.JSONDecoder()
+    candidates = []
     for i, ch in enumerate(s):
         if ch != "{":
             continue
         try:
             obj, _ = dec.raw_decode(s[i:])
             if isinstance(obj, dict):
-                return obj
+                candidates.append(obj)
         except json.JSONDecodeError:
             continue
-    raise ValueError(f"未找到 JSON: {text[:200]}")
+    if not candidates:
+        raise ValueError(f"未找到 JSON: {text[:200]}")
+    # 优先返回含协议键的对象
+    for key in _PROTOCOL_KEYS:
+        for c in candidates:
+            if key in c:
+                return c
+    return candidates[0]
 
 
 # ---------------------------------------------------------------- mock 模式（管线验证 + 演示效果）
@@ -818,10 +855,15 @@ def run_case(case, args):
     parse_input = f"当前时间：{now_iso}\n用户安排：{case['task_input']}"
     out = call_llm(compose_system_prompt(cur_role, cur_mood, "parse", cur_user_gender, cur_persona_gender), parse_input, args)
     parsed = extract_json(out)
+    tasks = parsed.get("tasks", []) if isinstance(parsed, dict) else []
+    if not tasks:
+        print("   ⚠️ 真实模型解析未返回 tasks（偶发格式漂移），用兜底任务继续")
+        tasks = [{"title": case.get("task_input", "任务")[:20], "deadline": None,
+                  "strictness": case.get("strictness")}]
     strictness = case.get("strictness")
-    for t in parsed["tasks"]:
+    for t in tasks:
         sug = t.get("strictness")
-        print(f"   → 任务「{t['title']}」 截止 {t['deadline']} 宽限度建议={sug}")
+        print(f"   → 任务「{t.get('title','?')}」 截止 {t.get('deadline','?')} 宽限度建议={sug}")
         if strictness is None and sug in ("flexible", "normal", "strict"):
             strictness = sug
 
@@ -834,7 +876,7 @@ def run_case(case, args):
     # 习惯用例：生成每日提醒两条
     events = case.get("events", [])
     sent_nudges = []
-    deadline_str = parsed["tasks"][0].get("deadline") if parsed["tasks"] else None
+    deadline_str = tasks[0].get("deadline") if tasks else None
     if case.get("habit"):
         print("\n② 习惯每日提醒（锚点 + 晚间追问）")
         h = case["habit"]
@@ -847,8 +889,8 @@ def run_case(case, args):
         print("\n② 催促文案预生成（本地通知弹出用）")
         delay = case.get("delay_pattern")
         events = case.get("events", [])
-        nudge_input = json.dumps(parsed["tasks"][0], ensure_ascii=False)
-        deadline_str = parsed["tasks"][0].get("deadline")
+        nudge_input = json.dumps(tasks[0], ensure_ascii=False)
+        deadline_str = tasks[0].get("deadline") if tasks else None
         if deadline_str:
             try:
                 dl = datetime.fromisoformat(deadline_str)
@@ -960,7 +1002,7 @@ def run_case(case, args):
             f"{facts_line}{period_line}{delay_line}{pattern_line}{events_line}{notes_line}"
             f"{promise_line}{sent_line}{strict_line}{habit_line}{mod_line}{digest_line}{dialog_line}"
             f"[历史借口记录：{'、'.join(history) or '无'}]\n"
-            f"[任务：{parsed['tasks'][0]['title']} {overdue_desc}]\n"
+            f"[任务：{tasks[0]['title']} {overdue_desc}]\n"
             f"{time_line}{night_line}用户说：{exc['user']}"
         )
         out = call_llm(compose_system_prompt(cur_role, cur_mood, "judge", cur_user_gender, cur_persona_gender), user_content, args)
@@ -1015,7 +1057,7 @@ def run_case(case, args):
         promise_desc = "按时完成" if c.get("on_time") else "逾期完成"
         if "kept_promise" in c:
             promise_desc += "，且兑现了之前的时间承诺" if c["kept_promise"] else "，之前的时间承诺没有兑现"
-        celebrate_input = f"[任务：{parsed['tasks'][0]['title']}，{promise_desc}]\n[此前对话]\n{''.join(dialogue)}\n用户刚刚完成了任务。"
+        celebrate_input = f"[任务：{tasks[0]['title']}，{promise_desc}]\n[此前对话]\n{''.join(dialogue)}\n用户刚刚完成了任务。"
         out = call_llm(compose_system_prompt(cur_role, cur_mood, "celebrate", cur_user_gender, cur_persona_gender), celebrate_input, args)
         v = extract_json(out)
         print(f"   状态：{promise_desc}")
