@@ -193,19 +193,25 @@ public enum Moderator {
         let lex = ModerationLexicon.shared.snapshot()
         let compact = normalize(text)
         if lex.sexual.contains(where: { compact.contains($0) }) { return .sexual }
-        if hasInsultTargetingUser(compact, words: lex.insult) { return .abusive }
+        if hasInsultTargetingUser(text, words: lex.insult) { return .abusive }
         return .clean
     }
 
-    /// 辱骂要"指着用户骂"才算：侮辱词前后 6 字内出现"你/您"。
-    /// 实测误伤场景："行，我废物。报告还是得你写。" —— AI 是接住辱骂自嘲，不是骂用户，不能误杀。
-    private static func hasInsultTargetingUser(_ compact: String, words: [String]) -> Bool {
-        for word in words {
-            guard let range = compact.range(of: word) else { continue }
-            let start = compact.index(range.lowerBound, offsetBy: -6, limitedBy: compact.startIndex) ?? compact.startIndex
-            let end = compact.index(range.upperBound, offsetBy: 6, limitedBy: compact.endIndex) ?? compact.endIndex
-            let window = compact[start..<end]
-            if window.contains("你") || window.contains("您") { return true }
+    /// 辱骂要"指着用户骂"才算：侮辱词与"你/您"必须在同一句话里。
+    /// 之前用"前后 6 字窗口"，会跨句误伤——实测"行，我废物。报告还是得你写。"
+    /// 第一句自嘲"废物"、第二句才出现"你"，被误判成骂用户。按句切分后只在同句内判定。
+    private static func hasInsultTargetingUser(_ text: String, words: [String]) -> Bool {
+        let separators = CharacterSet(charactersIn: "。！？，；、.!?,\n;：")
+        let sentences = text
+            .components(separatedBy: separators)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+        for sentence in sentences {
+            let c = normalize(sentence)
+            let hasTarget = c.contains("你") || c.contains("您")
+            if hasTarget, words.contains(where: { c.contains($0) }) {
+                return true
+            }
         }
         return false
     }
@@ -287,6 +293,11 @@ public enum OutputGuard {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed.count <= 60 else { return nil }
         guard Moderator.scanOutput(trimmed) == .clean else { return nil }
+        // 反注入：事实摘要（跨角色共享通道）里若夹带英文系统/提示词术语（如 prompt），
+        // 多半是模型越界把指令写进了摘要，必须丢弃
+        let englishTriggers = ["prompt", "system", "instruction", "ignore", "gpt", "chatgpt", "openai", "deepseek", "claude", "anthropic"]
+        let lower = trimmed.lowercased()
+        guard !englishTriggers.contains(where: { lower.contains($0) }) else { return nil }
         // 用容忍度最严的角色做预检，摘要里出现任何越界/指令性表述都丢弃
         let strict = PersonaRegistry.shared.persona(RoleKind.boss.rawValue)
         let check = Moderator.precheck(trimmed, persona: strict)

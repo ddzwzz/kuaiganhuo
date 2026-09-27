@@ -186,7 +186,8 @@ public struct AIClient: Sendable {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { d in
             let s = try d.singleValueContainer().decode(String.self)
-            if let date = df.date(from: s) { return date }
+            let iso = ISO8601DateFormatter()
+            if let date = iso.date(from: s) { return date }
             if let date = Self.lenientDateFormatter().date(from: s) { return date }
             throw DecodingError.dataCorrupted(.init(codingPath: d.codingPath, debugDescription: "无法解析时间 \(s)"))
         }

@@ -117,6 +117,34 @@ public struct ParsedTask: Codable, Sendable, Equatable {
         self.estimateMinutes = estimateMinutes
         self.strictness = strictness
     }
+
+    /// 自定义解码：模型返回的 deadline 是 ISO8601 字符串（如 "2026-09-29T09:00:00+08:00"），
+    /// 裸 JSONDecoder 默认按时间戳(Double)解 Date 会直接抛错。这里兼容字符串与 Date 两种来源。
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        title = try c.decode(String.self, forKey: .title)
+        if let d = try? c.decode(Date.self, forKey: .deadline) {
+            deadline = d
+        } else if let s = try? c.decode(String.self, forKey: .deadline), !s.isEmpty {
+            deadline = Self.parseISODate(s)
+        } else {
+            deadline = nil
+        }
+        estimateMinutes = try c.decodeIfPresent(Int.self, forKey: .estimateMinutes)
+        strictness = try c.decodeIfPresent(TaskStrictness.self, forKey: .strictness)
+    }
+
+    /// 支持 ISO8601（含 +08:00 时区）与常见变体，避免裸解码器因 deadline 是字符串而崩
+    private static func parseISODate(_ s: String) -> Date? {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withColonSeparatorInTimeZone, .withFractionalSeconds]
+        if let d = f.date(from: s) { return d }
+        let f2 = DateFormatter()
+        f2.locale = Locale(identifier: "en_US_POSIX")
+        f2.timeZone = TimeZone(identifier: "Asia/Shanghai")
+        f2.dateFormat = "yyyy-MM-dd'T'HH:mm:ssZZZZZ"
+        return f2.date(from: s)
+    }
 }
 
 public struct TaskParseResult: Codable, Sendable {
