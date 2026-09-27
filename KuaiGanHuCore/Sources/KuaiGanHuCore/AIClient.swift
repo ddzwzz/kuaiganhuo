@@ -43,12 +43,12 @@ public struct AIClient: Sendable {
 
     // MARK: - 底层调用
 
-    struct WireMessage: Codable {
+    public struct WireMessage: Codable {
         var role: String
         var content: String
     }
 
-    struct WireRequest: Codable {
+    public struct WireRequest: Codable {
         var model: String
         var messages: [WireMessage]
         var temperature: Double
@@ -60,7 +60,7 @@ public struct AIClient: Sendable {
         }
     }
 
-    struct WireResponse: Codable {
+    public struct WireResponse: Codable {
         struct Choice: Codable {
             struct Msg: Codable { var content: String? }
             var message: Msg
@@ -186,9 +186,8 @@ public struct AIClient: Sendable {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { d in
             let s = try d.singleValueContainer().decode(String.self)
-            for f in [df, Self.lenientDateFormatter()] {
-                if let date = f.date(from: s) { return date }
-            }
+            if let date = df.date(from: s) { return date }
+            if let date = Self.lenientDateFormatter().date(from: s) { return date }
             throw DecodingError.dataCorrupted(.init(codingPath: d.codingPath, debugDescription: "无法解析时间 \(s)"))
         }
         for t in decoded.tasks ?? [] {

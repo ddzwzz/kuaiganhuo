@@ -281,7 +281,7 @@ public struct JudgeResult: Codable, Sendable {
 }
 
 public struct ChatMessage: Codable, Sendable, Equatable {
-    public enum Sender: String, Codable {
+    public enum Sender: String, Codable, Sendable {
         case user, supervisor
     }
     public var sender: Sender
