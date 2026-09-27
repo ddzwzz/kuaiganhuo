@@ -1,0 +1,42 @@
+name: KuaiGanHuo
+options:
+  bundleIdPrefix: com.kgh
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+packages:
+  KuaiGanHuCore:
+    path: KuaiGanHuCore
+
+targets:
+  KuaiGanHuo:
+    type: application
+    platform: iOS
+    sources:
+      - path: KuaiGanHuo
+    dependencies:
+      - package: KuaiGanHuCore
+    info:
+      path: KuaiGanHuo/Info.plist
+      properties:
+        UILaunchScreen: {}
+        CFBundleDisplayName: 快干活
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kgh.kuaiganhuo
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        GENERATE_INFOPLIST_FILE: false
+        SWIFT_VERSION: "5.9"
+
+schemes:
+  KuaiGanHuo:
+    build:
+      targets:
+        KuaiGanHuo: all
+    run:
+      config: Debug

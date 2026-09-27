@@ -1,0 +1,40 @@
+name: iOS 编译验证
+
+# 每次推代码 / 提 PR，云端 Mac 自动跑：① 核心包单元测试 ② 完整编译 App
+# 目的：在没有 Mac 的 Windows 上也能立刻发现编译错误，报错位置直接看 Actions 页面
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit-test:
+    name: 核心包单元测试
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift 版本
+        run: swift --version
+      - name: 跑测试（提示词拼装 / JSON 解析 / 审核与隔离逻辑）
+        run: swift test --package-path KuaiGanHuCore
+
+  build-app:
+    name: 编译 App
+    runs-on: macos-14
+    needs: unit-test
+    steps:
+      - uses: actions/checkout@v4
+      - name: 安装 XcodeGen
+        run: brew install xcodegen
+      - name: 生成 Xcode 工程
+        run: xcodegen generate
+      - name: 编译（iOS 模拟器目标，不做签名）
+        run: |
+          xcodebuild \
+            -scheme KuaiGanHuo \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath .build/derived \
+            -skipPackagePluginValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            build

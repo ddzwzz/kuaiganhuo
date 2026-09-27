@@ -1,0 +1,18 @@
+# Xcode 生成物（由 xcodegen 现场生成，不必入库）
+*.xcodeproj/
+*.xcworkspace/
+DerivedData/
+.build/
+build/
+
+# SwiftPM
+Packages/
+.swiftpm/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 本地环境
+*.env
+.env
