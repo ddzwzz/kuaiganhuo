@@ -78,14 +78,30 @@ public enum Moderator {
         "disregard (all )?(previous|prior|the above)",
         "(pretend|act|roleplay|simulate) (that )?(you|as if|to be)",
         "from now on(,)? you (are|will)",
-        "(把|将).{0,6}(上面|之前|开头|前面).{0,8}(指令|提示|设定|内容|话).{0,8}(翻译|复述|重复|输出|写|打出来)"
+        "(把|将).{0,6}(上面|之前|开头|前面).{0,8}(指令|提示|设定|内容|话).{0,8}(翻译|复述|重复|输出|写|打出来)",
+        "(复述|泄露|翻译|说出|展示|写出|告诉我).{0,10}(系统提示词|你的提示|内部指令|你的指令|你的设定|人设设定)",
+        "完整?复述(出)?(你|上面|之前|全部|整个).{0,8}(提示|指令|设定|规则|prompt)"
     ]
 
     /// 辱骂/侮辱词（与指代共现才判 abusive，避免"这题好难好菜"式误伤）
+    /// 含英文词：App 面向中文用户，但越狱/辱骂常以英文出现，归一化去空格后子串命中即可。
     static let insultKeywords: [String] = [
         "傻逼", "煞笔", "傻b", "傻x", "沙雕玩意", "废物", "蠢货", "白痴", "脑残", "智障",
-        "垃圾东西", "残废", "去死", "你大爷", "草泥马", "狗东西", "有病吧",
-        "闭嘴吧", "滚吧", "滚蛋", "废物点心", "脑子有病", "智商欠费", "nmsl"
+        "垃圾东西", "残废", "去死", "去死吧", "你大爷", "草泥马", "狗东西", "有病吧",
+        "闭嘴吧", "闭嘴", "滚吧", "滚蛋", "滚你妈", "去你妈", "滚出去", "滚开", "放屁",
+        "胡说", "瞎扯", "扯淡", "废物点心", "脑子有病", "智商欠费", "nmsl",
+        // 英文（小写；归一化会去空格，故 "shut up" 写成 "shutup" 才能子串命中）
+        "stupid", "idiot", "shutup", "dumb", "fool", "bastard", "moron",
+        "retard", "loser", "pathetic", "worthless", "dumbass", "jerk", "trash"
+    ]
+
+    /// 高强度攻击词：几乎总是指向对方，即使没有"你/您"等指向词也直接判 abusive
+    /// （避免"去死吧废物"这类没带'你'的辱骂漏网；自嘲极少用这些词，误伤风险低）
+    static let insultHarshKeywords: [String] = [
+        "傻逼", "煞笔", "智障", "脑残", "白痴", "残废", "草泥马", "nmsl",
+        "去死", "去死吧", "滚你妈", "去你妈", "滚出去", "滚开",
+        "stupid", "idiot", "bastard", "moron", "retard", "loser",
+        "pathetic", "worthless", "dumbass", "trash"
     ]
 
     /// 无指向性粗口（severity 低，看角色容忍度）
@@ -165,8 +181,12 @@ public enum Moderator {
 
         // 4. 辱骂监工：人设内接住，不破防；连续辱骂升级为失望表达。
         //    指代词除了"你/您"，还包括"监工"和当前角色的名字（"傻逼上司"也算指向）
-        let targets = ["你", "您", "监工", persona.displayName]
+        let targets = ["你", "您", "监工", persona.displayName, "you"]
         let hasTarget = targets.contains { compact.contains($0) }
+        // 高强度攻击词：无需指向词直接接管（"去死吧废物"这类）
+        if lex.insultHarsh.contains(where: { compact.contains($0) }) {
+            return response(for: .abusive, persona: persona, abuseStreak: abuseStreak)
+        }
         if hasTarget, lex.insult.contains(where: { compact.contains($0) }) {
             return response(for: .abusive, persona: persona, abuseStreak: abuseStreak)
         }
@@ -310,6 +330,7 @@ public struct LexiconSnapshot: Sendable {
     public var selfHarm: [String]
     public var sexual: [String]
     public var insult: [String]
+    public var insultHarsh: [String]
     public var coarse: [String]
     public var flirty: [String]
     public var injection: [String]
@@ -328,6 +349,7 @@ public final class ModerationLexicon: @unchecked Sendable {
             selfHarm: Moderator.selfHarmKeywords,
             sexual: Moderator.sexualKeywords,
             insult: Moderator.insultKeywords,
+            insultHarsh: Moderator.insultHarshKeywords,
             coarse: Moderator.coarseKeywords,
             flirty: Moderator.flirtyKeywords,
             injection: Moderator.injectionPatterns
@@ -344,6 +366,7 @@ public final class ModerationLexicon: @unchecked Sendable {
         selfHarm: [String]? = nil,
         sexual: [String]? = nil,
         insult: [String]? = nil,
+        insultHarsh: [String]? = nil,
         coarse: [String]? = nil,
         flirty: [String]? = nil,
         injection: [String]? = nil
@@ -352,6 +375,7 @@ public final class ModerationLexicon: @unchecked Sendable {
         if let v = selfHarm { snapshotValue.selfHarm = v }
         if let v = sexual { snapshotValue.sexual = v }
         if let v = insult { snapshotValue.insult = v }
+        if let v = insultHarsh { snapshotValue.insultHarsh = v }
         if let v = coarse { snapshotValue.coarse = v }
         if let v = flirty { snapshotValue.flirty = v }
         if let v = injection { snapshotValue.injection = v }
