@@ -4,6 +4,8 @@ options:
   deploymentTarget:
     iOS: "17.4"
   createIntermediateGroups: true
+  # 锁死工程文件格式，避免 XcodeGen 生成"未来格式(77)"，CI 上 Xcode 15.4 打不开
+  projectFileFormat: "Xcode 15"
 
 packages:
   KuaiGanHuCore:
