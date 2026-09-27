@@ -40,7 +40,7 @@ struct OnboardingView: View {
                         Text("监工人设会据此贴合：父母/上司的性别可单独选，伴侣模式会自动使用与你相反的性别。只存在手机本地，随时可改。")
                     }
 
-                    Section("有没有需要监工体谅的情况？") {
+                    Section {
                         ForEach(draft.indices, id: \.self) { i in
                             Label(draft[i], systemImage: "checkmark.circle")
                                 .foregroundStyle(.green)
@@ -56,6 +56,8 @@ struct OnboardingView: View {
                             }
                             .disabled(input.trimmingCharacters(in: .whitespaces).isEmpty)
                         }
+                    } header: {
+                        Text("有没有需要监工体谅的情况？")
                     } footer: {
                         Text("完全可选，可以以后在设置里补填。只存在手机本地。")
                     }

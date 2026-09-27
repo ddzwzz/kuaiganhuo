@@ -18,7 +18,7 @@ struct AddTaskView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("跟监工说你的安排") {
+                Section {
                     TextEditor(text: $input)
                         .frame(minHeight: 100)
                         .disabled(parsing || generating)
@@ -32,20 +32,32 @@ struct AddTaskView: View {
                         }
                     }
                     .disabled(input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || parsing || generating)
+                } header: {
+                    Text("跟监工说你的安排")
+                } footer: {
+                    EmptyView()
                 }
 
                 if let clarification = parsed?.clarification, editingTasks.isEmpty {
-                    Section("监工有话说") {
+                    Section {
                         Label(clarification, systemImage: "questionmark.bubble")
                             .foregroundStyle(.orange)
+                    } header: {
+                        Text("监工有话说")
+                    } footer: {
+                        EmptyView()
                     }
                 }
 
                 if !editingTasks.isEmpty {
-                    Section("解析结果（可改）") {
+                    Section {
                         ForEach(editingTasks.indices, id: \.self) { i in
                             EditableTaskRow(task: $editingTasks[i])
                         }
+                    } header: {
+                        Text("解析结果（可改）")
+                    } footer: {
+                        EmptyView()
                     }
                     Section {
                         Button {

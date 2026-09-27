@@ -33,12 +33,14 @@ struct SettingsView: View {
                     Text("推荐 DeepSeek：platform.deepseek.com 注册 → 充值 10 元 → 创建 API Key。Key 只存在手机钥匙串里，不上传任何服务器。")
                 }
 
-                Section("接口") {
+                Section {
                     TextField("Base URL", text: Bindable(appState).baseURL)
                         .keyboardType(.URL)
                         .autocorrectionDisabled()
                     TextField("模型名", text: Bindable(appState).model)
                         .autocorrectionDisabled()
+                } header: {
+                    Text("接口")
                 } footer: {
                     Text("任何 OpenAI 兼容接口都能填（DeepSeek / 豆包 / Kimi / 通义）。已调用 \(appState.aiCalls) 次，失败 \(appState.aiFailures) 次。")
                 }
@@ -112,7 +114,7 @@ struct SettingsView: View {
                     Text("每个监工都有自己的性别设定。伴侣模式固定与你的性别相反（男用户→女友，女用户→男友），其余模式可自选。")
                 }
 
-                Section("我的情况（监工会体谅）") {
+                Section {
                     ForEach(appState.userFacts.indices, id: \.self) { i in
                         Text(appState.userFacts[i])
                     }
@@ -129,6 +131,8 @@ struct SettingsView: View {
                         }
                         .disabled(factInput.trimmingCharacters(in: .whitespaces).isEmpty)
                     }
+                } header: {
+                    Text("我的情况（监工会体谅）")
                 } footer: {
                     Text("登记确诊疾病、考试周等真实情况，监工判定时会记得并适当宽限。只在手机本地保存。")
                 }

@@ -202,14 +202,22 @@ private struct NewHabitView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("习惯") {
+                Section {
                     TextField("想坚持什么（如：背50个单词）", text: $name)
+                } header: {
+                    Text("习惯")
+                } footer: {
+                    EmptyView()
                 }
-                Section("锚点——把它绑在一个固定时刻上（习惯科学：绑定现有节律比靠意志力靠谱）") {
+                Section {
                     Picker("场景", selection: $anchor) {
                         ForEach(anchorOptions, id: \.self) { Text($0) }
                     }
                     DatePicker("提醒时间", selection: $time, displayedComponents: .hourAndMinute)
+                } header: {
+                    Text("锚点——把它绑在一个固定时刻上（习惯科学：绑定现有节律比靠意志力靠谱）")
+                } footer: {
+                    EmptyView()
                 }
                 Section {
                     Text("前 7 天是启动期（多哄多夸），第 8-30 天是最容易放弃的挣扎期（提醒最狠），66 天后习惯基本成形。漏一天不算失败，恢复打卡才是重点。")
@@ -285,21 +293,29 @@ private struct HabitExcuseSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("和监工说说为什么") {
+                Section {
                     TextField("今天怎么啦？", text: $excuse, axis: .vertical)
                         .lineLimit(3...6)
+                } header: {
+                    Text("和监工说说为什么")
+                } footer: {
+                    EmptyView()
                 }
                 if thinking {
                     Section { HStack { ProgressView(); Text("监工在想…") } }
                 }
                 if let reply {
-                    Section("监工") {
+                    Section {
                         Text(reply)
                         if let v = verdict, let i = index {
                             Text(v == .reasonable ? "判定：合理（狡辩指数 \(i)）" : "判定：狡辩（指数 \(i)）")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                    } header: {
+                        Text("监工")
+                    } footer: {
+                        EmptyView()
                     }
                 }
             }
