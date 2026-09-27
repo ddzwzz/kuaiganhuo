@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- 不跟踪用户（没有广告 SDK、没有第三方统计） -->
+  <key>NSPrivacyTracking</key>
+  <false/>
+  <key>NSPrivacyTrackingDomains</key>
+  <array/>
+  <!-- 不收集任何用户数据：任务、对话、档案全部只存本机；
+       AI 调用直连用户自己填的 API 端点，不经过我们的服务器 -->
+  <key>NSPrivacyCollectedDataTypes</key>
+  <array/>
+  <!-- 未使用需要申报"必需理由"的 API（UserDefaults / Keychain 不在名单内） -->
+  <key>NSPrivacyAccessedAPITypes</key>
+  <array/>
+</dict>
+</plist>
