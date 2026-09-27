@@ -353,6 +353,7 @@ struct ChatView: View {
         let gender = appState.genderContext
         let title = task.title
         let history = task.messages
+        let kept = keptPromise
         Task {
             let fallback = PersonaRegistry.shared.resolved(roleID, gender: gender.personaGender).praise[mood]
                 ?? PersonaRegistry.shared.persona(roleID).praise[mood]
@@ -360,7 +361,7 @@ struct ChatView: View {
             let reply: String
             if let r = try? await client.generateCelebration(
                 roleID: roleID, mood: mood, taskTitle: title,
-                onTime: !wasLate, keptPromise: keptPromise, history: history,
+                onTime: !wasLate, keptPromise: kept, history: history,
                 gender: gender
             ), OutputGuard.safe(r) != nil {
                 reply = r
