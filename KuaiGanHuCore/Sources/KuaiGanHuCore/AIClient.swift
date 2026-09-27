@@ -120,6 +120,11 @@ public struct AIClient: Sendable {
     }
 
     /// 从模型输出中抠出第一个括号配平的 JSON（容忍 ```json 包裹、前后废话、多对象输出）
+    // 协议顶层键：模型偶发在前面吐一段废话 JSON（如 {"ok":true}）时，优先挑含这些键的对象
+    private static let protocolKeys = ["tasks", "nudges", "verdict", "reply", "anchor", "evening",
+                                       "profile_question", "safety_refuse", "promise_claim", "excuse_type",
+                                       "major_event", "habit"]
+
     static func extractJSON(from text: String) throws -> Data {
         var body = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if body.contains("```") {
@@ -131,31 +136,48 @@ public struct AIClient: Sendable {
                 }
             }
         }
-        // 找第一个配平的 {...}，而不是贪心取首尾（LLM 偶尔输出两个对象）
-        if let start = body.firstIndex(of: "{") {
-            var depth = 0
-            var inString = false
-            var previous: Character = " "
-            var idx = start
-            while idx < body.endIndex {
-                let ch = body[idx]
-                if inString {
-                    if ch == "\"" && previous != "\\" { inString = false }
-                } else {
-                    if ch == "\"" { inString = true }
-                    else if ch == "{" { depth += 1 }
-                    else if ch == "}" {
-                        depth -= 1
-                        if depth == 0 {
-                            return String(body[start...idx]).data(using: .utf8)!
+        // 收集所有配平的 {...} 对象（LLM 偶尔输出多个对象，或前面带废话 JSON）
+        var candidates: [String] = []
+        var i = body.startIndex
+        while i < body.endIndex {
+            if body[i] == "{" {
+                var depth = 0
+                var inString = false
+                var previous: Character = " "
+                var j = i
+                while j < body.endIndex {
+                    let ch = body[j]
+                    if inString {
+                        if ch == "\"" && previous != "\\" { inString = false }
+                    } else {
+                        if ch == "\"" { inString = true }
+                        else if ch == "{" { depth += 1 }
+                        else if ch == "}" {
+                            depth -= 1
+                            if depth == 0 {
+                                candidates.append(String(body[i...j]))
+                                break
+                            }
                         }
                     }
+                    previous = ch
+                    j = body.index(after: j)
                 }
-                previous = ch
-                idx = body.index(after: idx)
+                // 该 '{' 没有配平的右括号（畸形输出）→ 停止扫描，避免越界
+                guard j < body.endIndex else { break }
+                i = body.index(after: j)
+            } else {
+                i = body.index(after: i)
             }
         }
-        throw AIError.badJSON("没找到 JSON：" + String(text.prefix(120)))
+        guard !candidates.isEmpty else {
+            throw AIError.badJSON("没找到 JSON：" + String(text.prefix(120)))
+        }
+        // 优先返回含协议键的对象（避免取到 AI 偶发的前导废话 JSON）
+        for cand in candidates where protocolKeys.contains(where: { cand.contains("\"\($0)\":") }) {
+            return cand.data(using: .utf8)!
+        }
+        return candidates[0].data(using: .utf8)!
     }
 
     // MARK: - 协议 1：任务解析
