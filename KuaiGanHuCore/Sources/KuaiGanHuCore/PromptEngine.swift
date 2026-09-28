@@ -180,6 +180,9 @@ public final class PromptEngine: Sendable {
 
     // MARK: - 判定协议指令（独立常量，便于测试与同步）
 
+    /// 暴露 KuaiGanHuCore 资源 bundle 给测试目标（SPM 静态库下 Bundle(for:) 会回退到 Bundle.main，导致取不到打包的资源）
+    public static var resourceBundle: Bundle { Bundle.module }
+
         /// 判定协议指令（提示词单一来源：从 judge_rules.txt 资源读取，避免与测试台漂移）
     static let judgeInstructions: String = {
         if let url = Bundle.module.url(forResource: "judge_rules", withExtension: "txt"),

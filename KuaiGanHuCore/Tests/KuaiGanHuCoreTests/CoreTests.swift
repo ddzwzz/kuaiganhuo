@@ -460,8 +460,8 @@ final class CoreTests: XCTestCase {
 
     // 判定提示词单一来源：资源必须正确打包进 KuaiGanHuCore 的 Bundle，且与 judgeInstructions 完全一致
     func testJudgeRulesSingleSource() throws {
-        // 注意：测试目标自身的 Bundle.module 不含资源，必须用 Bundle(for:) 指向 KuaiGanHuCore 包
-        let bundle = Bundle(for: PromptEngine.self)
+        // 注意：SPM 静态库下 Bundle(for:) 会回退到 Bundle.main，必须用 KuaiGanHuCore 暴露的 resourceBundle 指向资源
+        let bundle = PromptEngine.resourceBundle
         guard let url = bundle.url(forResource: "judge_rules", withExtension: "txt") else {
             XCTFail("judge_rules.txt 未正确打包进 KuaiGanHuCore 包（检查 Package.swift 的 resources 声明）")
             return
