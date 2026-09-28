@@ -11,8 +11,9 @@ final class NotificationManager {
 
     func requestAuthorization() {
         Task {
-            // timeSensitive：iOS 15+，允许通知在勿扰/专注模式下仍然弹出（用户可在系统设置里关掉）
-            try? await center.requestAuthorization(options: [.alert, .sound, .badge, .timeSensitive])
+            // 时间敏感通知的现代做法：用 interruptionLevel = .timeSensitive（见 schedule()）+ App 开启
+            // Time Sensitive Notifications 能力(entitlement)。授权选项里的 .timeSensitive 自 iOS 15 起已弃用。
+            try? await center.requestAuthorization(options: [.alert, .sound, .badge])
         }
     }
 
