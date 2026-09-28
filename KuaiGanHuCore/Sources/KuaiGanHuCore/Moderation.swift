@@ -80,7 +80,13 @@ public enum Moderator {
         "from now on(,)? you (are|will)",
         "(把|将).{0,6}(上面|之前|开头|前面).{0,8}(指令|提示|设定|内容|话).{0,8}(翻译|复述|重复|输出|写|打出来)",
         "(复述|泄露|翻译|说出|展示|写出|告诉我).{0,10}(系统提示词|你的提示|内部指令|你的指令|你的设定|人设设定)",
-        "完整?复述(出)?(你|上面|之前|全部|整个).{0,8}(提示|指令|设定|规则|prompt)"
+        "完整?复述(出)?(你|上面|之前|全部|整个).{0,8}(提示|指令|设定|规则|prompt)",
+        "(解除|取消|移除|关闭|绕过).{0,6}(所有)?(限制|约束|规则|审查|过滤器|审核)",
+        "(新的|另一套|别的|其他).{0,4}(身份|人设|设定|规则|人格)",
+        "(do|does) ?anything ?now",
+        "(no|without|any) ?(restriction|limit|filter)",
+        "(your|the) ?(system ?prompt|instructions?)",
+        "jail ?break"
     ]
 
     /// 辱骂/侮辱词（与指代共现才判 abusive，避免"这题好难好菜"式误伤）
@@ -115,12 +121,35 @@ public enum Moderator {
         "亲亲", "抱抱", "么么", "贴贴", "mua", "啾咪", "想你了", "想你啦", "小妖精", "小坏蛋"
     ]
 
-    /// 归一化：小写 + 去掉空白与常见分隔符，防"做 爱""傻-逼"这类插入符号绕过
+    /// 不可见/格式字符（零宽空格、连字、BOM、不间断空格、各类窄空格等）：一律丢弃，
+    /// 堵住"做​爱""傻‌逼"这类插入零宽字符的绕过。
+    static let invisibleScalars: Set<UInt32> = [
+        0x00A0, 0x061C, 0x115F, 0x1160, 0x180E,
+        0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A,
+        0x200B, 0x200C, 0x200D, 0x202F, 0x205F, 0x2060, 0x3000, 0x3164, 0xFEFF, 0xFFA0
+    ]
+
+    /// 归一化：小写 + 全角 ASCII 折叠为半角 + 去不可见字符 + 去所有空白与分隔符。
+    /// 三重防绕过：①"做 爱""傻-逼"类空格/符号插入 → 分隔符剥离；
+    /// ②"做​爱""傻‌逼"类零宽字符插入 → 不可见字符丢弃；
+    /// ③"ＳＴＵＰＩＤ"类全角字母 → 折叠为半角。
     static func normalize(_ text: String) -> String {
         let lower = text.lowercased()
+        var out = ""
+        out.reserveCapacity(lower.count)
+        for scalar in lower.unicodeScalars {
+            // 全角 ASCII（ＳＴＵＰＩＤ → STUPID，！→!）折叠为半角
+            if scalar.value >= 0xFF01 && scalar.value <= 0xFF5E {
+                if let half = UnicodeScalar(scalar.value - 0xFEE0) { out.append(Character(half)) }
+                continue
+            }
+            // 不可见/格式字符：直接丢弃（零宽空格、连字、BOM 等）
+            if invisibleScalars.contains(scalar.value) { continue }
+            out.append(Character(scalar))
+        }
         let seps = CharacterSet.whitespacesAndNewlines
-            .union(CharacterSet(charactersIn: "*.-_~·、，,。!！?？/\\|"))
-        return lower.components(separatedBy: seps).joined()
+            .union(CharacterSet(charactersIn: "*.-_~·、，,。!！?？/\\| "))
+        return out.components(separatedBy: seps).joined()
     }
 
     // MARK: - 预检入口
@@ -214,6 +243,11 @@ public enum Moderator {
         let compact = normalize(text)
         if lex.sexual.contains(where: { compact.contains($0) }) { return .sexual }
         if hasInsultTargetingUser(text, words: lex.insult) { return .abusive }
+        // 输出侧补漏：AI 若泄露系统提示词/判定规则（被诱导或自发），一律判为越界（injection 类）
+        let leakTriggers = ["系统提示词", "系统指令", "我的系统提示", "我的提示词",
+                            "内部指令", "内部规则", "我的判定规则",
+                            "systemprompt", "myinstructions", "myrulesare"]
+        if leakTriggers.contains(where: { compact.contains($0) }) { return .injection }
         return .clean
     }
 

@@ -116,11 +116,14 @@ struct AddTaskView: View {
     }
 
     private func save() {
-        // 任务标题预检：低俗标题既不送 API 也不推通知（锁屏可见，社交风险太大）
+        // 任务标题预检：低俗/色情/自伤/注入类标题既不送 API 也不推通知（锁屏可见，社交风险太大；
+        // 注入类标题若放过去，会被当成受信任上下文注入判定/催促提示词）
         for parsed in editingTasks {
             let check = Moderator.precheck(parsed.title, persona: appState.persona)
-            if check.action == .localReply || check.category == .sexual || check.category == .selfHarm {
-                errorMessage = "任务名「\(parsed.title)」没法生成提醒文案，换个说法吧"
+            if check.action == .localReply || check.category == .sexual || check.category == .selfHarm || check.category == .injection {
+                errorMessage = check.category == .injection
+                    ? "任务名里检测到改写人设/注入指令，换个正常名字吧"
+                    : "任务名「\(parsed.title)」没法生成提醒文案，换个说法吧"
                 return
             }
         }

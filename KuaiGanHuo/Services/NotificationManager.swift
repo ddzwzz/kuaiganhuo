@@ -105,7 +105,9 @@ final class NotificationManager {
     private func schedule(id: String, title: String, body: String, at date: Date, thread: String, timeSensitive: Bool = false) {
         let content = UNMutableNotificationContent()
         content.title = title
-        content.body = body
+        // 输出侧兜底：通知正文要上锁屏（比聊天更公开），最后再过滤一遍——即使上游漏拦，
+        // 越界文案一律换成中性兜底，绝不让辱骂/色情/泄露类内容出现在锁屏上
+        content.body = OutputGuard.safe(body) ?? "该干活了。"
         // 声音开关（默认开）
         if UserDefaults.standard.object(forKey: "kgh.soundOn") as? Bool ?? true {
             content.sound = .default
