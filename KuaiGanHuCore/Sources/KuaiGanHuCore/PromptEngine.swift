@@ -4,7 +4,7 @@ import Foundation
 /// 人设内容已迁移至 PersonaRegistry（数据驱动）：改人设/加新角色去注册表改，
 /// 这里只负责组装：身份（含性别变体）→ 性别上下文 → 语气 → 安全边界 → 协议指令。
 /// 三端（App / 测试台 / CI 测试）共用同一套内容。
-public struct PromptEngine: Sendable {
+public final class PromptEngine: Sendable {
 
     // MARK: - 情绪调制
 
