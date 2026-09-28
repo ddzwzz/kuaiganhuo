@@ -1,0 +1,11 @@
+# 统一换行符为 LF：Windows 上开发、macOS（CI 编译）上构建，避免 CRLF 转换警告
+* text=auto eol=lf
+
+# 二进制文件不转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.zip binary
+*.pyc binary
