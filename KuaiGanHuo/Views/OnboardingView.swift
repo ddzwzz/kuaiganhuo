@@ -8,14 +8,13 @@ struct OnboardingView: View {
     @State private var draft: [String] = []
     @State private var input = ""
     @State private var gender: UserGender = .undisclosed
+    @State private var avatar: AvatarKind = .builtin(1)
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 VStack(spacing: 8) {
-                    Image(systemName: "person.wave.2.fill")
-                        .font(.system(size: 44))
-                        .foregroundStyle(.tint)
+                    AvatarView(kind: avatar, size: 64)
                     Text("让监工认识真实的你")
                         .font(.title3.weight(.semibold))
                     Text("填写后，监工判定借口时会记得这些情况——\n比如真有肠胃炎，就不会被当成装病")
@@ -38,6 +37,31 @@ struct OnboardingView: View {
                         Text("你的性别")
                     } footer: {
                         Text("监工人设会据此贴合：父母/上司的性别可单独选，伴侣模式会自动使用与你相反的性别。只存在手机本地，随时可改。")
+                    }
+
+                    Section {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 12) {
+                                ForEach(builtInAvatars) { ava in
+                                    let kind = AvatarKind.builtin(ava.id)
+                                    Button { avatar = kind } label: {
+                                        AvatarView(kind: kind, size: 56)
+                                            .overlay(
+                                                Circle()
+                                                    .stroke(avatar == kind ? Color.accentColor : Color.clear, lineWidth: 3)
+                                                    .padding(-3)
+                                            )
+                                    }
+                                    .buttonStyle(.plain)
+                                    .accessibilityLabel("头像 \(ava.id)")
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                    } header: {
+                        Text("给监工挑个头像")
+                    } footer: {
+                        Text("内置头像都是 App 自己画的几何图形，不涉及任何第三方素材。以后可以在设置里换成自己的照片。")
                     }
 
                     Section {
@@ -74,6 +98,7 @@ struct OnboardingView: View {
                     Button("开始") {
                         appState.userFacts = draft
                         appState.userGender = gender
+                        appState.setAvatar(avatar, for: appState.roleID)
                         UserDefaults.standard.set(true, forKey: "kgh.onboarded")
                         dismiss()
                     }
@@ -82,5 +107,9 @@ struct OnboardingView: View {
             }
         }
         .interactiveDismissDisabled()
+        .task {
+            // 首次进入时把选择器对齐到当前角色的默认头像
+            avatar = appState.avatar(for: appState.roleID)
+        }
     }
 }

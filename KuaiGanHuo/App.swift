@@ -117,6 +117,18 @@ final class AppState {
             }
         }
     }
+    /// 每个监工角色的头像（角色 ID → 头像编码）。内置头像由代码绘制，自定义头像存本地文件
+    var roleAvatars: [String: String] {
+        didSet {
+            if let data = try? JSONEncoder().encode(roleAvatars) {
+                UserDefaults.standard.set(data, forKey: "kgh.roleAvatars")
+            }
+        }
+    }
+    /// 用户自己的头像编码
+    var userAvatarID: String {
+        didSet { UserDefaults.standard.set(userAvatarID, forKey: "kgh.userAvatar") }
+    }
 
     init() {
         let d = UserDefaults.standard
@@ -177,6 +189,31 @@ final class AppState {
         } else {
             self.excuseStats = [:]
         }
+        if let data = d.data(forKey: "kgh.roleAvatars"),
+           let map = try? JSONDecoder().decode([String: String].self, from: data) {
+            self.roleAvatars = map
+        } else {
+            self.roleAvatars = [:]
+        }
+        self.userAvatarID = d.string(forKey: "kgh.userAvatar") ?? "b:11"
+    }
+
+    // MARK: - 头像
+
+    /// 用户自己的头像
+    var myAvatar: AvatarKind {
+        get { AvatarKind(encoded: userAvatarID) ?? .builtin(11) }
+        set { userAvatarID = newValue.encoded }
+    }
+
+    /// 某监工角色的头像（没设置过就用该角色的默认内置头像）
+    func avatar(for id: String) -> AvatarKind {
+        if let enc = roleAvatars[id], let kind = AvatarKind(encoded: enc) { return kind }
+        return .builtin(defaultBuiltInIndex(for: id))
+    }
+
+    func setAvatar(_ kind: AvatarKind, for id: String) {
+        roleAvatars[id] = kind.encoded
     }
 
     // MARK: - 重大事件体谅期

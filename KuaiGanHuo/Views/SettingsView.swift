@@ -18,6 +18,32 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
+                    NavigationLink {
+                        AvatarPickerView(
+                            title: "\(appState.persona.displayName)的头像",
+                            selection: roleAvatarBinding()
+                        )
+                    } label: {
+                        avatarRow(title: "\(appState.persona.displayName)的头像", kind: appState.avatar(for: appState.roleID))
+                    }
+                    NavigationLink {
+                        AvatarPickerView(
+                            title: "我的头像",
+                            selection: Binding(
+                                get: { appState.myAvatar },
+                                set: { appState.myAvatar = $0 }
+                            )
+                        )
+                    } label: {
+                        avatarRow(title: "我的头像", kind: appState.myAvatar)
+                    }
+                } header: {
+                    Text("头像")
+                } footer: {
+                    Text("内置头像是 App 自己画的几何图形，不涉及任何第三方素材，不会有版权问题；也可以从相册选自己的照片，图片只存在手机本地。")
+                }
+
+                Section {
                     LabeledContent("当前 Key", value: appState.apiKeySet ? "已保存" : "未设置")
                     SecureField("API Key（sk- 开头）", text: $keyInput)
                     Button("保存 Key") {
@@ -233,6 +259,26 @@ struct SettingsView: View {
             }
             .navigationTitle("设置")
         }
+    }
+
+    /// 头像设置行：左侧头像图 + 名称，右侧显示来源
+    private func avatarRow(title: String, kind: AvatarKind) -> some View {
+        HStack(spacing: 12) {
+            AvatarView(kind: kind, size: 44)
+            Text(title)
+            Spacer(minLength: 8)
+            Text(kind.isCustom ? "照片" : "内置")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// 当前监工头像的双向绑定
+    private func roleAvatarBinding() -> Binding<AvatarKind> {
+        Binding(
+            get: { appState.avatar(for: appState.roleID) },
+            set: { appState.setAvatar($0, for: appState.roleID) }
+        )
     }
 
     /// 单角色的性别配置行：伴侣模式只读（与用户相反），其余模式可选

@@ -74,9 +74,8 @@ struct ChatView: View {
     }
 
     private var header: some View {
-        HStack {
-            Image(systemName: "person.wave.2.fill")
-                .foregroundStyle(.tint)
+        HStack(spacing: 10) {
+            AvatarView(kind: appState.avatar(for: appState.roleID), size: 34)
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(appState.persona.displayName) · \(appState.mood.displayName)")
                     .font(.subheadline.weight(.medium))
@@ -378,11 +377,17 @@ struct ChatView: View {
 /// 聊天气泡：判定结果默认隐藏，点一下才揭示（保留"被戳穿"的戏剧感，不剧透）
 struct Bubble: View {
     let message: ChatMessage
+    @Environment(AppState.self) private var appState
     @State private var revealed = false
 
     var body: some View {
-        HStack {
-            if message.sender == .user { Spacer(minLength: 40) }
+        HStack(alignment: .bottom, spacing: 6) {
+            if message.sender == .supervisor {
+                // 历史消息按"当时那个监工"显示头像（旧版本消息无 roleKey 时回落到当前角色）
+                AvatarView(kind: appState.avatar(for: message.roleKey ?? appState.roleID), size: 30)
+            } else {
+                Spacer(minLength: 40)
+            }
             VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 4) {
                 if message.sender == .supervisor, let verdict = message.verdict, revealed {
                     HStack(spacing: 4) {
@@ -409,7 +414,11 @@ struct Bubble: View {
                 }
             }
             .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { revealed.toggle() } }
-            if message.sender == .supervisor { Spacer(minLength: 40) }
+            if message.sender == .user {
+                AvatarView(kind: appState.myAvatar, size: 30)
+            } else {
+                Spacer(minLength: 40)
+            }
         }
     }
 }

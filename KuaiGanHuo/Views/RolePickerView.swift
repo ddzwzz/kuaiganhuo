@@ -99,6 +99,7 @@ struct RolePickerView: View {
 }
 
 struct RoleCard: View {
+    @Environment(AppState.self) private var appState
     let def: PersonaDefinition
     let isSelected: Bool
     let quote: String
@@ -106,10 +107,8 @@ struct RoleCard: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: def.icon)
-                .font(.title2)
-                .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
-                .frame(width: 36)
+            AvatarView(kind: appState.avatar(for: def.id), size: 38)
+                .opacity(isSelected ? 1 : 0.7)
             VStack(alignment: .leading, spacing: 4) {
                 HStack(spacing: 6) {
                     Text(def.displayName)
