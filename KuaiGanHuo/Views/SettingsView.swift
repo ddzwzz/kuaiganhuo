@@ -1,10 +1,12 @@
 import SwiftUI
+import SwiftData
 import UIKit
 import KuaiGanHuCore
 
 /// 设置页：API 配置 + 通知权限 + 档案（情况/生理期/拖延模式）
 struct SettingsView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.modelContext) private var modelContext
     @AppStorage("kgh.soundOn") private var soundOn = true
     @State private var keyInput = ""
     @State private var factInput = ""
@@ -13,6 +15,11 @@ struct SettingsView: View {
     @State private var periodDate = Date()
     @State private var testing = false
     @State private var testResult: String?
+    // 备份 / 恢复
+    @State private var showExporter = false
+    @State private var showImporter = false
+    @State private var backupFile: BackupFile?
+    @State private var backupMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -252,12 +259,77 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Button {
+                        prepareExport()
+                    } label: {
+                        Label("导出备份文件", systemImage: "square.and.arrow.up")
+                    }
+                    Button {
+                        showImporter = true
+                    } label: {
+                        Label("从备份恢复", systemImage: "square.and.arrow.down")
+                    }
+                } header: {
+                    Text("数据备份")
+                } footer: {
+                    Text("导出一个 JSON 文件（任务、对话、习惯、偏好），存到「文件」App 或转发给自己的另一台设备，在那台设备上用「从备份恢复」导入，就能把记录搬过去。恢复是按任务 ID 合并，不会删掉现有内容。API Key 不在备份里，新设备需要重新填一次。" + (backupMessage.map { "\n\n\($0)" } ?? ""))
+                }
+
+                Section {
                     LabeledContent("版本", value: "0.1.0")
                 } footer: {
                     Text("快干活 · AI 监工 · 所有数据仅存本机")
                 }
             }
             .navigationTitle("设置")
+            .fileExporter(
+                isPresented: $showExporter,
+                document: backupFile,
+                contentType: .json,
+                defaultFilename: Self.defaultBackupName
+            ) { result in
+                switch result {
+                case .success: backupMessage = "备份已导出"
+                case .failure(let error): backupMessage = "导出失败：\(error.localizedDescription)"
+                }
+                backupFile = nil
+            }
+            .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
+                switch result {
+                case .success(let url):
+                    do {
+                        let accessed = url.startAccessingSecurityScopedResource()
+                        defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                        let data = try Data(contentsOf: url)
+                        let snapshot = try BackupService.decode(data)
+                        let summary = try BackupService.apply(snapshot, context: modelContext, appState: appState)
+                        backupMessage = "已恢复：新增 \(summary.newTasks) 个任务、\(summary.newHabits) 个习惯；" +
+                            "覆盖 \(summary.updatedTasks) 个任务、\(summary.updatedHabits) 个习惯"
+                    } catch {
+                        backupMessage = "这个文件读不懂：\(error.localizedDescription)"
+                    }
+                case .failure(let error):
+                    backupMessage = "选择文件失败：\(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    // MARK: - 备份
+
+    private static var defaultBackupName: String {
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        return "快干活备份-\(f.string(from: Date()))"
+    }
+
+    private func prepareExport() {
+        do {
+            let data = try BackupService.exportData(context: modelContext, appState: appState)
+            backupFile = BackupFile(data: data)
+            showExporter = true
+        } catch {
+            backupMessage = "生成备份失败：\(error.localizedDescription)"
         }
     }
 
