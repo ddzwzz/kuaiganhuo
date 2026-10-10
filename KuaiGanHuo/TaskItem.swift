@@ -33,6 +33,23 @@ final class TaskItem {
     /// 跨角色共享的任务事实摘要（AI 每轮提炼，最近 8 条；切换监工角色时交接任务进展用）
     var factDigests: [String]
 
+    // MARK: - 周期 / 固定时间段（每天几点做、每周哪几天、每 N 天）
+    /// 重复规则原始值（RepeatRule）
+    var repeatRuleRaw: String = RepeatRule.none.rawValue
+    /// 每周规则下选中的星期（1=周日 … 7=周六），与 Calendar.component(.weekday) 一致
+    var weekdays: [Int] = []
+    /// 每 N 天规则下的间隔天数
+    var intervalDays: Int = 3
+    /// 固定做这件事的时刻 "HH:mm"（周期任务用；空=不限时刻）
+    var timeOfDay: String = ""
+    /// 完成日志（"yyyy-MM-dd"，周期任务按天记，一天只记一次）
+    var completions: [String] = []
+
+    // MARK: - 任务类型（决定监工给的具体建议）
+    var taskTypeRaw: String = TaskKind.auto.rawValue
+    /// 具体建议轮换游标（保证不连着重复同一句）
+    var stepCursor: Int = 0
+
     var status: TaskStatus {
         get { TaskStatus(rawValue: statusRaw) ?? .pending }
         set { statusRaw = newValue.rawValue }
@@ -41,6 +58,69 @@ final class TaskItem {
     var strictness: TaskStrictness {
         get { TaskStrictness(rawValue: strictnessRaw) ?? .normal }
         set { strictnessRaw = newValue.rawValue }
+    }
+
+    var repeatRule: RepeatRule {
+        get { RepeatRule(rawValue: repeatRuleRaw) ?? .none }
+        set { repeatRuleRaw = newValue.rawValue }
+    }
+
+    var kind: TaskKind {
+        get { TaskKind(rawValue: taskTypeRaw) ?? .auto }
+        set { taskTypeRaw = newValue.rawValue }
+    }
+
+    /// auto 时按标题关键词兜底识别
+    var resolvedKind: TaskKind {
+        kind == .auto ? TaskKind.detect(title: title) : kind
+    }
+
+    var isRecurring: Bool { repeatRule != .none }
+
+    /// 规则简述，如 "每周一三"、"每 3 天"
+    var repeatLabel: String {
+        Recurrence.label(rule: repeatRule, weekdays: weekdays, intervalDays: intervalDays)
+    }
+
+    /// 今天是否该做（只针对周期任务）
+    func isDueToday(now: Date = Date()) -> Bool {
+        guard status != .done else { return false }
+        return Recurrence.isDueToday(rule: repeatRule, weekdays: weekdays,
+                                     intervalDays: intervalDays, completions: completions, now: now)
+    }
+
+    func doneToday(now: Date = Date()) -> Bool {
+        Recurrence.doneToday(completions: completions, now: now)
+    }
+
+    /// 到了固定时刻但今天还没做
+    func missedToday(now: Date = Date()) -> Bool {
+        guard isRecurring, !timeOfDay.isEmpty, !doneToday(now: now),
+              let at = Recurrence.today(at: timeOfDay, now: now) else { return false }
+        return now > at
+    }
+
+    /// 周期任务：记今天完成（幂等，重复调用只记一次）
+    @discardableResult
+    func markDoneToday(now: Date = Date()) -> Bool {
+        let key = Recurrence.dayKey(now)
+        if completions.contains(key) { return false }
+        completions.append(key)
+        if completions.count > 400 { completions.removeFirst(completions.count - 400) }
+        return true
+    }
+
+    /// 下一次该做的自然语言描述
+    func nextDueText(now: Date = Date()) -> String {
+        Recurrence.nextDueText(rule: repeatRule, weekdays: weekdays,
+                               intervalDays: intervalDays, timeOfDay: timeOfDay, from: now)
+    }
+
+    /// 取一条"此刻能立刻开始"的具体动作（同一任务轮换，不重复）
+    func nextConcreteStep() -> String {
+        let s = resolvedKind.step(cursor: stepCursor)
+        stepCursor += 1
+        return s
     }
 
     init(title: String, deadline: Date?, nudges: NudgeSet, strictness: TaskStrictness = .normal) {

@@ -25,7 +25,7 @@ struct ChatView: View {
                 ScrollView {
                     LazyVStack(spacing: 10) {
                         ForEach(task.messages.indices, id: \.self) { i in
-                            Bubble(message: task.messages[i])
+                            Bubble(message: $task.messages[i])
                                 .id(i)
                         }
                     }
@@ -175,6 +175,8 @@ struct ChatView: View {
         let sentNudges = task.sentNudges(for: roleID)
         let title = task.title
         let factDigests = task.factDigests
+        // 任务类型：让监工催的是这类任务的具体动作，而不是放之四海皆准的"快去做"
+        let kindLine = PromptEngine.taskKindLine(task.resolvedKind, cursor: task.stepCursor)
 
         Task {
             defer { thinking = false }
@@ -199,19 +201,23 @@ struct ChatView: View {
                     strictness: task.strictness,
                     gender: gender,
                     moderationLine: moderation.instruction,
-                    factDigests: factDigests
+                    factDigests: factDigests,
+                    taskKindLine: kindLine
                 )
                 // 输出侧自检：AI 自己跑偏时，用内置兜底替换（通知栏比聊天更公开，不能冒这个险）
                 let persona = appState.persona
                 let fallbackLine = persona.nudgeExamples[mood]?.first ?? "该干活了。"
                 var replyText = result.reply.isEmpty ? "先照顾好自己，别的事我们以后再说。" : result.reply
                 if OutputGuard.safe(replyText) == nil { replyText = fallbackLine }
+                // 教练模式：AI 给的"此刻能立刻开始的具体动作"（走输出侧安检后才显示）
+                let step = result.nextStep.flatMap { OutputGuard.safe($0) }
                 append(ChatMessage(
                     sender: .supervisor,
                     text: replyText,
                     verdict: result.verdict,
                     bullshitIndex: result.bullshitIndex,
-                    roleKey: roleID
+                    roleKey: roleID,
+                    nextStep: step
                 ))
                 if let question = result.profileQuestion, question != "null",
                    OutputGuard.safe(question) != nil {
@@ -376,7 +382,7 @@ struct ChatView: View {
 
 /// 聊天气泡：判定结果默认隐藏，点一下才揭示（保留"被戳穿"的戏剧感，不剧透）
 struct Bubble: View {
-    let message: ChatMessage
+    @Binding var message: ChatMessage
     @Environment(AppState.self) private var appState
     @State private var revealed = false
 
@@ -411,6 +417,38 @@ struct Bubble: View {
                     Text("点击查看判定")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
+                }
+                // 教练模式：具体下一步（点一下划掉，给自己一个"我动了"的确认）
+                if message.sender == .supervisor, let step = message.nextStep {
+                    Button {
+                        withAnimation { message.stepDone = !(message.stepDone ?? false) }
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text((message.stepDone ?? false) ? "已完成 ✓" : "下一步")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle((message.stepDone ?? false) ? Color.green : Color.accentColor)
+                            Text(step)
+                                .font(.subheadline)
+                            Text((message.stepDone ?? false) ? "撤销" : "做了这一下 ✓")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(Color.accentColor)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .background(
+                            (message.stepDone ?? false)
+                                ? Color.green.opacity(0.12)
+                                : Color.accentColor.opacity(0.10)
+                        )
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        .overlay(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill((message.stepDone ?? false) ? Color.green : Color.accentColor)
+                                .frame(width: 3)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .opacity((message.stepDone ?? false) ? 0.6 : 1)
                 }
             }
             .onTapGesture { withAnimation(.easeInOut(duration: 0.15)) { revealed.toggle() } }

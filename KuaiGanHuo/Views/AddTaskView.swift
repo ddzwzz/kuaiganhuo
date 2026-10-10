@@ -153,6 +153,12 @@ struct AddTaskView: View {
                         )
                     }
                     let item = TaskItem(title: parsed.title, deadline: parsed.deadline, nudges: nudges, strictness: parsed.strictness ?? .normal)
+                    // 周期 / 固定时间段 / 任务类型（决定监工给的具体建议）
+                    if let r = parsed.repeatRule { item.repeatRule = r }
+                    if let w = parsed.weekdays { item.weekdays = w }
+                    if let i = parsed.intervalDays { item.intervalDays = i }
+                    if let t = parsed.timeOfDay { item.timeOfDay = t }
+                    if let k = parsed.taskType { item.kind = k }
                     // 预生成文案将随通知发出，先记账，聊天时 AI 不许重复这些话（带角色标签，切换监工时不串味）
                     for text in nudges.atDeadline + [nudges.graceOver] {
                         item.appendSentNudge(text, roleID: roleID)
@@ -175,8 +181,12 @@ struct AddTaskView: View {
 struct EditableTaskRow: View {
     @Binding var task: ParsedTask
 
+    private static let weekdayNames = ["日", "一", "二", "三", "四", "五", "六"]
+
+    private var rule: RepeatRule { task.repeatRule ?? .none }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             TextField("任务名", text: $task.title)
             DatePicker("截止", selection: Binding(
                 get: { task.deadline ?? Date().addingTimeInterval(3600) },
@@ -191,6 +201,72 @@ struct EditableTaskRow: View {
                 }
             }
             .pickerStyle(.segmented)
+
+            // 固定时间段（每天/每周哪天、几点做）——比只有截止日期更贴合习惯型任务
+            Picker("重复", selection: Binding(
+                get: { task.repeatRule ?? .none },
+                set: { task.repeatRule = ($0 == .none ? nil : $0) }
+            )) {
+                ForEach(RepeatRule.allCases) { r in
+                    Text(r.displayName).tag(r)
+                }
+            }
+
+            if rule == .weekly {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("星期几做").font(.caption).foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        ForEach(1...7, id: \.self) { w in
+                            Button(Self.weekdayNames[w - 1]) { toggle(w) }
+                                .buttonStyle(.bordered)
+                                .tint(selected(w) ? .orange : .gray)
+                        }
+                    }
+                }
+            }
+
+            if rule == .interval {
+                Stepper(value: Binding(
+                    get: { task.intervalDays ?? 3 },
+                    set: { task.intervalDays = max(1, $0) }
+                ), in: 2...60) {
+                    Text("每 \(max(1, task.intervalDays ?? 3)) 天做一次")
+                }
+            }
+
+            if rule != .none {
+                HStack {
+                    Text("固定时间")
+                    Spacer()
+                    TextField("07:30", text: Binding(
+                        get: { task.timeOfDay ?? "" },
+                        set: { task.timeOfDay = $0.isEmpty ? nil : $0 }
+                    ))
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 90)
+                }
+                .font(.subheadline)
+            }
+
+            Picker("类型", selection: Binding(
+                get: { task.taskType ?? .auto },
+                set: { task.taskType = ($0 == .auto ? nil : $0) }
+            )) {
+                ForEach(TaskKind.allCases) { k in
+                    Text(k.displayName).tag(k)
+                }
+            }
+            .font(.subheadline)
         }
+    }
+
+    private func selected(_ w: Int) -> Bool {
+        (task.weekdays ?? []).contains(w)
+    }
+
+    private func toggle(_ w: Int) {
+        var list = task.weekdays ?? []
+        if let i = list.firstIndex(of: w) { list.remove(at: i) } else { list.append(w) }
+        task.weekdays = list
     }
 }

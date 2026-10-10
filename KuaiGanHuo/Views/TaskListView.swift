@@ -9,6 +9,15 @@ struct TaskListView: View {
     @Environment(AppState.self) private var appState
     @State private var showAdd = false
 
+    /// 周期任务里今天该做的（按固定时刻排序）
+    private var todayTasks: [TaskItem] {
+        tasks.filter { $0.isDueToday() }
+            .sorted { ($0.timeOfDay.isEmpty ? "99:99" : $0.timeOfDay) < ($1.timeOfDay.isEmpty ? "99:99" : $1.timeOfDay) }
+    }
+
+    /// 其余任务（一次性 + 今天不用做的周期任务）
+    private var restTasks: [TaskItem] { tasks.filter { !$0.isDueToday() } }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -20,12 +29,34 @@ struct TaskListView: View {
                     )
                 } else {
                     List {
-                        ForEach(tasks) { task in
+                        if !todayTasks.isEmpty {
+                            Section("今天该做") {
+                                ForEach(todayTasks) { task in
+                                    HStack(spacing: 8) {
+                                        Button {
+                                            withAnimation { _ = task.markDoneToday() }
+                                        } label: {
+                                            Image(systemName: task.doneToday() ? "checkmark.circle.fill" : "circle")
+                                                .foregroundStyle(task.doneToday() ? Color.green : Color.secondary)
+                                        }
+                                        .buttonStyle(.plain)
+                                        NavigationLink(value: task) { TaskRow(task: task) }
+                                    }
+                                }
+                            }
+                        }
+                        ForEach(restTasks) { task in
                             NavigationLink(value: task) {
                                 TaskRow(task: task)
                             }
                         }
-                        .onDelete(perform: delete)
+                        .onDelete { offsets in
+                            for index in offsets {
+                                let task = restTasks[index]
+                                NotificationManager.shared.cancelTaskNotifications(taskID: task.idString)
+                                context.delete(task)
+                            }
+                        }
                     }
                 }
             }
@@ -46,13 +77,6 @@ struct TaskListView: View {
         }
     }
 
-    private func delete(at offsets: IndexSet) {
-        for index in offsets {
-            let task = tasks[index]
-            NotificationManager.shared.cancelTaskNotifications(taskID: task.idString)
-            context.delete(task)
-        }
-    }
 }
 
 struct TaskRow: View {
@@ -68,7 +92,10 @@ struct TaskRow: View {
                 statusBadge
             }
             HStack(spacing: 8) {
-                if let d = task.deadline {
+                if task.isRecurring {
+                    Text(task.repeatLabel + (task.timeOfDay.isEmpty ? "" : " \(task.timeOfDay)"))
+                    Text("下次 \(task.nextDueText())")
+                } else if let d = task.deadline {
                     Text(d.formatted(.dateTime.month().day().hour().minute()))
                 }
                 if task.strictness != .normal {
@@ -86,6 +113,18 @@ struct TaskRow: View {
 
     private var statusBadge: some View {
         Group {
+            if task.isRecurring {
+                if task.doneToday() {
+                    Label("今天已做", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                } else if task.missedToday() {
+                    Label("还没做", systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
+                } else {
+                    Label("待办", systemImage: "circle.dashed")
+                        .foregroundStyle(.secondary)
+                }
+            } else {
             switch task.status {
             case .done:
                 Label("完成", systemImage: "checkmark.circle.fill")
@@ -101,6 +140,7 @@ struct TaskRow: View {
                     Label("进行中", systemImage: "circle.dashed")
                         .foregroundStyle(.secondary)
                 }
+            }
             }
         }
         .font(.caption)

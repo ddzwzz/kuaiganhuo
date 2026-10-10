@@ -103,19 +103,47 @@ public struct ParsedTask: Codable, Sendable, Equatable {
     public var estimateMinutes: Int?
     /// AI 建议的宽限度（用户保存时可改）
     public var strictness: TaskStrictness?
+    /// 周期/固定时间段（AI 可选给，用户可在保存前改）
+    public var repeatRule: RepeatRule?
+    /// 每周规则下的星期（1=周日 … 7=周六）
+    public var weekdays: [Int]?
+    /// 每 N 天规则下的间隔
+    public var intervalDays: Int?
+    /// 固定做这件事的时刻 "HH:mm"
+    public var timeOfDay: String?
+    /// 任务类型（决定监工给的具体建议）；nil = 自动识别
+    public var taskType: TaskKind?
 
     enum CodingKeys: String, CodingKey {
         case title
         case deadline
         case estimateMinutes = "estimate_minutes"
         case strictness
+        case repeatRule = "repeat"
+        case weekdays
+        case intervalDays = "interval_days"
+        case timeOfDay = "time_of_day"
+        case taskType = "task_type"
     }
 
-    public init(title: String, deadline: Date? = nil, estimateMinutes: Int? = nil, strictness: TaskStrictness? = nil) {
+    public init(title: String,
+                deadline: Date? = nil,
+                estimateMinutes: Int? = nil,
+                strictness: TaskStrictness? = nil,
+                repeatRule: RepeatRule? = nil,
+                weekdays: [Int]? = nil,
+                intervalDays: Int? = nil,
+                timeOfDay: String? = nil,
+                taskType: TaskKind? = nil) {
         self.title = title
         self.deadline = deadline
         self.estimateMinutes = estimateMinutes
         self.strictness = strictness
+        self.repeatRule = repeatRule
+        self.weekdays = weekdays
+        self.intervalDays = intervalDays
+        self.timeOfDay = timeOfDay
+        self.taskType = taskType
     }
 
     /// 自定义解码：模型返回的 deadline 是 ISO8601 字符串（如 "2026-09-29T09:00:00+08:00"），
@@ -132,6 +160,24 @@ public struct ParsedTask: Codable, Sendable, Equatable {
         }
         estimateMinutes = try c.decodeIfPresent(Int.self, forKey: .estimateMinutes)
         strictness = try c.decodeIfPresent(TaskStrictness.self, forKey: .strictness)
+        repeatRule = try c.decodeIfPresent(RepeatRule.self, forKey: .repeatRule)
+        weekdays = try c.decodeIfPresent([Int].self, forKey: .weekdays)
+        intervalDays = try c.decodeIfPresent(Int.self, forKey: .intervalDays)
+        timeOfDay = try c.decodeIfPresent(String.self, forKey: .timeOfDay)
+        taskType = try c.decodeIfPresent(TaskKind.self, forKey: .taskType)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(title, forKey: .title)
+        try c.encodeIfPresent(deadline, forKey: .deadline)
+        try c.encodeIfPresent(estimateMinutes, forKey: .estimateMinutes)
+        try c.encodeIfPresent(strictness, forKey: .strictness)
+        try c.encodeIfPresent(repeatRule, forKey: .repeatRule)
+        try c.encodeIfPresent(weekdays, forKey: .weekdays)
+        try c.encodeIfPresent(intervalDays, forKey: .intervalDays)
+        try c.encodeIfPresent(timeOfDay, forKey: .timeOfDay)
+        try c.encodeIfPresent(taskType, forKey: .taskType)
     }
 
     /// 支持 ISO8601（含 +08:00 时区）与常见变体，避免裸解码器因 deadline 是字符串而崩
@@ -237,6 +283,8 @@ public struct JudgeResult: Codable, Sendable {
     public var excuseType: String?
     /// 从用户本轮话语提炼的任务相关客观事实（如"晚上8点有课"），切换监工角色时跨角色交接用，无则 null
     public var factDigest: String?
+    /// 教练模式：此刻能立刻开始的具体动作（≤30字，如"打开文档先把标题列出来"）；仅在用户卡住/没动力时给
+    public var nextStep: String?
     /// 模型自身判定：这轮用户的诉求越界、它无法配合（本地词表漏网的变体由它兜底），
     /// true 时 reply 是角色口吻的软拒，协议仍完整——这样模型的拒答不会破坏 JSON
     public var safetyRefuse: Bool?
@@ -257,6 +305,7 @@ public struct JudgeResult: Codable, Sendable {
         case promiseDueMinutes = "promise_due_minutes"
         case excuseType = "excuse_type"
         case factDigest = "fact_digest"
+        case nextStep = "next_step"
         case safetyRefuse = "safety_refuse"
     }
 
@@ -278,6 +327,11 @@ public struct JudgeResult: Codable, Sendable {
         promiseDueMinutes = try? c.decode(Int.self, forKey: .promiseDueMinutes)
         excuseType = try? c.decode(String.self, forKey: .excuseType)
         factDigest = try? c.decode(String.self, forKey: .factDigest)
+        if let s = try? c.decode(String.self, forKey: .nextStep), !s.isEmpty, s != "null" {
+            nextStep = s
+        } else {
+            nextStep = nil
+        }
         safetyRefuse = try? c.decode(Bool.self, forKey: .safetyRefuse)
     }
 
@@ -287,7 +341,8 @@ public struct JudgeResult: Codable, Sendable {
         factCandidate: String? = nil, userMood: String? = nil,
         toneNote: String? = nil, majorEvent: String? = nil,
         promiseClaim: String? = nil, promiseDueMinutes: Int? = nil,
-        excuseType: String? = nil, factDigest: String? = nil, safetyRefuse: Bool? = nil
+        excuseType: String? = nil, factDigest: String? = nil, nextStep: String? = nil,
+        safetyRefuse: Bool? = nil
     ) {
         self.verdict = verdict
         self.bullshitIndex = bullshitIndex
@@ -304,6 +359,7 @@ public struct JudgeResult: Codable, Sendable {
         self.promiseDueMinutes = promiseDueMinutes
         self.excuseType = excuseType
         self.factDigest = factDigest
+        self.nextStep = nextStep
         self.safetyRefuse = safetyRefuse
     }
 }
@@ -319,13 +375,19 @@ public struct ChatMessage: Codable, Sendable, Equatable {
     /// 这条对话发生时的监工角色 ID。模式隔离：注入 AI 上下文时只带同角色的对话，
     /// 防止父母/伴侣模式的敏感内容串进上司模式。nil = 旧版本消息（兼容放行，避免老用户历史丢失）
     public var roleKey: String?
+    /// 教练模式给的具体下一步（显示在气泡下方，可点击划掉）
+    public var nextStep: String?
+    /// 用户是否已做掉这条下一步（Optional：老数据没有这个键也能正常解出来）
+    public var stepDone: Bool?
 
-    public init(sender: Sender, text: String, verdict: Verdict? = nil, bullshitIndex: Int? = nil, roleKey: String? = nil) {
+    public init(sender: Sender, text: String, verdict: Verdict? = nil,
+                bullshitIndex: Int? = nil, roleKey: String? = nil, nextStep: String? = nil) {
         self.sender = sender
         self.text = text
         self.verdict = verdict
         self.bullshitIndex = bullshitIndex
         self.roleKey = roleKey
+        self.nextStep = nextStep
     }
 }
 
