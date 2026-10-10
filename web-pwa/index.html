@@ -21,16 +21,16 @@
 html,body{margin:0;padding:0;height:100%;overflow:hidden}
 body{font:15px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro SC","PingFang SC",sans-serif;
      background:var(--bg);color:var(--text);overscroll-behavior:none}
-#app{height:100%;display:flex;flex-direction:column}
+#app{height:100%;width:100%;max-width:100%;display:flex;flex-direction:column}
 header{padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 10px;background:var(--card);
        border-bottom:.5px solid var(--sep);display:flex;align-items:center;gap:10px;flex:0 0 auto}
 header h1{margin:0;font-size:19px;font-weight:600;letter-spacing:.2px}
 header .sp{flex:1}
 header button{all:unset;color:var(--tint);font-size:15px;font-weight:500;cursor:pointer}
 main{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:8px}
-nav{flex:0 0 auto;display:flex;background:var(--card);border-top:.5px solid var(--sep);
+nav{flex:0 0 auto;display:flex;width:100%;justify-content:space-around;background:var(--card);border-top:.5px solid var(--sep);
     padding-bottom:var(--safe-b)}
-nav button{flex:1;all:unset;display:flex;flex-direction:column;align-items:center;gap:2px;
+nav button{flex:1 1 0;min-width:0;all:unset;display:flex;flex-direction:column;align-items:center;gap:2px;
            padding:7px 0 5px;font-size:10px;color:var(--text3);cursor:pointer}
 nav button.on{color:var(--tint)}
 nav svg{width:23px;height:23px}
@@ -91,6 +91,8 @@ input,select,textarea{font-family:inherit;font-size:15px;padding:11px 12px;borde
        background:rgba(0,0,0,.82);color:#fff;padding:9px 16px;border-radius:20px;font-size:13px;
        z-index:99;opacity:0;transition:opacity .2s;pointer-events:none;max-width:80%;text-align:center}
 .toast.show{opacity:1}
+.netbar{display:none;background:#FF3B30;color:#fff;font-size:12px;text-align:center;padding:5px 10px;flex:0 0 auto}
+.netbar.show{display:block}
 </style>
 </head>
 <body>
@@ -104,6 +106,7 @@ input,select,textarea{font-family:inherit;font-size:15px;padding:11px 12px;borde
   <nav id="nav"></nav>
 </div>
 <div class="toast" id="toast"></div>
+<div id="netbar" class="netbar">⚠ 网络未连接，AI 暂用内置话术</div>
 
 <script>
 /* ================= 存储 ================= */
@@ -260,7 +263,7 @@ function viewChat(){
       <div class="b">${esc(m.text)}</div>
     </div></div>`;
   }).join('');
-  return `<div class="chatwrap"><div class="chat" id="chatbox">${msgs||`<div class="empty" style="padding:40px 30px"><div>想聊就聊，<br>要给理由也直说</div></div>`}</div>
+  return `${(!S.settings.apiKey?`<div class="tip" style="margin:10px 12px">还没填 DeepSeek Key，监工现在只会内置话术。去「设置」填 Key，它才真的会聊、会判 😎</div>`:'')}<div class="chatwrap"><div class="chat" id="chatbox">${msgs||`<div class="empty" style="padding:40px 30px"><div>想聊就聊，<br>要给理由也直说</div></div>`}</div>
    <div class="bar"><input id="inp" placeholder="想聊就聊，要给理由也直说…" onkeydown="if(event.key==='Enter')send()">
    <button class="send" onclick="send()"><svg width="17" height="17" viewBox="0 0 24 24" fill="#fff"><path d="M12 4l8 8h-5v8H9v-8H4z"/></svg></button></div></div>`;
 }
@@ -439,6 +442,10 @@ window.importData=function(el){
 /* ================= 启动 ================= */
 render(); armTimers();
 if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+function updNet(){const b=document.getElementById('netbar');if(b)b.classList.toggle('show',!navigator.onLine);}
+window.addEventListener('online',()=>{updNet();toast('网络已恢复');});
+window.addEventListener('offline',updNet);
+updNet();
 </script>
 </body>
 </html>
