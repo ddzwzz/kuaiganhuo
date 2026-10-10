@@ -23,7 +23,7 @@ targets:
       path: KuaiGanHuo/Info.plist
       properties:
         UILaunchScreen: {}
-        CFBundleDisplayName: 快干活
+        CFBundleDisplayName: 这就去
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         ITSAppUsesNonExemptEncryption: false
