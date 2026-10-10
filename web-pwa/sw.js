@@ -1,4 +1,4 @@
-const CACHE = 'zhejiuqu-v3';
+const CACHE = 'zhejiuqu-v4';
 const ASSETS = [
   './',
   './index.html',

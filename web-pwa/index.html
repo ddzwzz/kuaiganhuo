@@ -147,7 +147,7 @@ function load(){
   try{ const r=JSON.parse(localStorage.getItem(KEY)); if(r&&r.tasks) return Object.assign({},DEF,r); }catch(e){}
   return JSON.parse(JSON.stringify(DEF));
 }
-function save(){ localStorage.setItem(KEY, JSON.stringify(S)); }
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
 
 /* ================= 头像（程序生成） ================= */
 const AV=[
@@ -344,6 +344,60 @@ function renderNav(){
 }
 function go(v){view=v;openTask=null;render();}
 
+/* ================= 安装 / 下载 ================= */
+let deferredPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;});
+window.addEventListener('appinstalled',()=>{deferredPrompt=null;if(view==='install')setTimeout(render,300);});
+function isStandalone(){return window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;}
+function isIOS(){const u=navigator.userAgent||'';return /iPhone|iPad|iPod/.test(u)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);}
+function isAndroid(){return /Android/.test(navigator.userAgent||'');}
+function isInApp(){return /MicroMessenger|QQ\/|Weibo|DingTalk|Alipay|baiduboxapp/i.test(navigator.userAgent||'');}
+
+function viewInstall(){
+  const ios=isIOS(), and=isAndroid(), sa=isStandalone(), inapp=isInApp(), off=!!window.__OFFLINE__;
+  let h='<div style="padding:10px 0 4px">';
+  if(inapp) h+=`<div class="tip" style="background:#FFF3E0;border-color:#FF9500">你现在是在<b>微信/QQ 内置浏览器</b>里，这里装不了应用。点右上角 <b>⋯</b> →<b>「在浏览器中打开」</b>（iPhone 选 Safari），回来再装。</div>`;
+  if(sa) h+=`<div class="tip" style="background:#E8F8EC"><b>已经装好了 ✅</b> 你现在就是从桌面图标进来的，全屏运行、和原生 App 一样。</div>`;
+  if(off) h+=`<div class="tip">你现在用的是<b>离线版</b>（下载到本地的文件）。离线版也能装到桌面，但要先从在线网址打开安装。</div>`;
+
+  h+=`<div class="sec-title">${ios?'装到 iPhone 桌面':'一键安装到桌面'}</div><div class="card">`;
+  if(deferredPrompt){
+    h+=`<div style="padding:16px 14px;text-align:center">
+      <button class="btn" style="margin:0" onclick="doInstall()">⬇️ 安装到${and?'手机':'电脑'}桌面</button>
+      <div class="note" style="padding-top:8px">点一下就装好，桌面出现「这就去」图标。${and?'<b>这是安卓系统生成的真实应用</b>，有独立图标和窗口，能离线打开，不需要应用商店。':'独立窗口运行，有桌面快捷方式。'}</div></div>`;
+  }else if(ios&&!sa){
+    h+=`<div style="padding:12px 14px;line-height:2;font-size:14px">
+      <div><b>1.</b> 确认当前用的是 <b>Safari</b>（不能是微信里打开的）</div>
+      <div><b>2.</b> 点屏幕<b>最底部中间</b>的分享按钮 <b>⬆️</b>（方框向上箭头）</div>
+      <div><b>3.</b> 向下滑，选 <b>「添加到主屏幕」</b></div>
+      <div><b>4.</b> 右上角点 <b>「添加」</b></div>
+      <div class="note" style="padding-top:8px">回到桌面就有「这就去」图标，点开是全屏的，没有地址栏，离线也能用。</div></div>`;
+  }else if(and){
+    h+=`<div style="padding:12px 14px;line-height:1.95;font-size:14px">用 <b>Chrome</b> 打开本页 → 右上角 <b>⋮</b> → <b>「安装应用」/「添加到主屏幕」</b>。
+      <div class="note" style="padding-top:8px">安卓上这一步会<b>真正安装一个应用</b>（Chrome 后台生成 APK 并装上），有桌面图标、独立窗口、能离线打开，完全不用应用商店。</div></div>`;
+  }else{
+    h+=`<div style="padding:12px 14px;line-height:1.95;font-size:14px">电脑上用 <b>Chrome / Edge</b> 打开本页 → 点地址栏右侧的<b>安装图标 ⊕</b>（或菜单 →「安装 这就去…」），装完有独立窗口和桌面快捷方式。</div>`;
+  }
+  h+='</div>';
+
+  h+=`<div class="sec-title">下载离线版（不装也能用）</div>
+  <div class="card"><div style="padding:12px 14px">
+    <div style="font-size:14px;line-height:1.7">下载一个<b>单文件网页</b>存到你的设备，双击就能打开用，<b>断网也能跑</b>（任务、对话都存在本地；只有 AI 对话需要联网）。适合发给别人，或当备份。</div>
+    <div style="padding-top:10px"><a class="btn" style="display:block;text-align:center;text-decoration:none;margin:0" href="zhejiuqu-offline.html" download="这就去-离线版.html">⬇️ 下载离线版</a></div>
+  </div></div>`;
+
+  h+=`<div class="note" style="padding:12px 14px"><b>为什么 iPhone 不能像安卓那样"下载安装"：</b>苹果不允许从网页直接安装 App。iPhone 只有两条路——①「添加到主屏幕」（上面第 1 步，效果几乎一样，免费）；② 上 App Store（需 ¥688/年开发者账号 + 备案，等你办下来我就上架）。安卓和电脑则可以真正安装。</div>`;
+  h+='</div>';
+  return h;
+}
+function doInstall(){
+  const p=deferredPrompt;
+  if(!p){toast('这个浏览器不支持一键安装，照上面的步骤手动装就行');return;}
+  p.prompt();
+  p.userChoice.then(r=>{deferredPrompt=null;if(r.outcome==='accepted')toast('正在安装…');setTimeout(render,400);});
+}
+window.doInstall=doInstall;
+
 function render(){
   renderNav();
   const main=document.getElementById('main'), act=document.getElementById('actBtn'), ttl=document.getElementById('title');
@@ -357,6 +411,7 @@ function render(){
       act.onclick=()=>{if(t){t.status='done';save();go('tasks');toast('干完了，这条结了');}}; }
     main.innerHTML=viewChat(); }
   else if(view==='me'){ ttl.textContent='设置'; act.textContent=''; act.onclick=null; main.innerHTML=viewMe(); }
+  else if(view==='install'){ ttl.textContent='装到桌面'; act.textContent=''; act.onclick=null; main.innerHTML=viewInstall(); }
   if(view==='chat') setTimeout(scrollBottom,30);
 }
 function scrollBottom(){const c=document.getElementById('chatbox');if(c)c.scrollTop=c.scrollHeight;}
@@ -623,7 +678,12 @@ function viewMe(){
   const st=S.settings;
   const standalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone;
   return `
-  ${!standalone?`<div class="tip"><b>把它装到手机桌面：</b>用 <b>Safari</b> 打开这个页面 → 点底部「分享」→ 选「添加到主屏幕」→ 桌面上就会出现「这就去」的图标，点开全屏运行，跟真 App 一样。${/iPhone|iPad/.test(navigator.userAgent)?'':'（Android/Chrome 会直接弹出安装提示）'}</div>`:''}
+  <div class="card">
+    <div class="row" onclick="go('install')">
+      <div class="t">${standalone?'✅ 已装在桌面 · 下载与安装选项':'📲 装到桌面 / 下载离线版'}</div>
+      <div class="r">›</div>
+    </div>
+  </div>
   <div class="sec-title">监工是谁</div>
   <div class="card">
     <div class="row"><div class="t">角色</div><div class="r">
