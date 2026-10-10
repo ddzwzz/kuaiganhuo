@@ -1,4 +1,4 @@
-const CACHE = 'zhejiuqu-v1';
+const CACHE = 'zhejiuqu-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -27,11 +27,24 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   // AI 接口请求一律不拦截（跨域，且含 Key）
   if (url.origin !== self.location.origin) return;
+  const isHTML = e.request.mode === 'navigate' ||
+    url.pathname === '/' || url.pathname.endsWith('index.html');
+  if (isHTML) {
+    // 页面网络优先：保证发版后手机一刷新就拿到新版；断网才回落缓存
+    e.respondWith(
+      fetch(e.request).then(res => {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, copy));
+        return res;
+      }).catch(() => caches.match(e.request).then(h => h || caches.match('./index.html')))
+    );
+    return;
+  }
   e.respondWith(
     caches.match(e.request).then(hit => hit || fetch(e.request).then(res => {
       const copy = res.clone();
       caches.open(CACHE).then(c => c.put(e.request, copy));
       return res;
-    }).catch(() => caches.match('./index.html')))
+    }))
   );
 });
